@@ -1,0 +1,137 @@
+/* Material Icon Theme 图标主题 */
+
+/* 文件图标容器样式 */
+.file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  margin-right: 6px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.file-icon img,
+.file-icon svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 文件图标大小变量 */
+.file-icon-sm {
+  width: 14px;
+  height: 14px;
+}
+
+.file-icon-md {
+  width: 16px;
+  height: 16px;
+}
+
+.file-icon-lg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 文件名和图标组合 */
+.file-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-entry-name {
+  flex: 1;
+  word-break: break-word;
+}
+
+/* 面包屑中的图标 */
+.breadcrumb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+  width: 1em;
+  height: 1em;
+}
+
+/* 表格中的文件名列 */
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.name-cell .name-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.name-cell .name-icon img,
+.name-cell .name-icon svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 不同文件类型的图标颜色和样式 */
+
+/* 编程语言类图标 */
+.file-icon[data-type="javascript"],
+.file-icon[data-type="typescript"],
+.file-icon[data-type="python"],
+.file-icon[data-type="java"] {
+  color: inherit;
+}
+
+/* 目录图标 */
+.folder-icon {
+  color: #ffc107;
+}
+
+/* 深色主题支持 */
+@media (prefers-color-scheme: dark) {
+  .file-icon {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .folder-icon {
+    color: #ffb300;
+  }
+}
+
+/* 浅色主题支持 */
+@media (prefers-color-scheme: light) {
+  .file-icon {
+    color: rgba(0, 0, 0, 0.65);
+  }
+
+  .folder-icon {
+    color: #d4a11b;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .name-cell .name-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .file-entry {
+    gap: 4px;
+  }
+}
