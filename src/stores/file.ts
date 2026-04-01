@@ -1,6 +1,6 @@
 import { computed, markRaw, ref, toRaw, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi } from '@/api/upload'
+import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi, restoreRecycleBinEntryApi } from '@/api/upload'
 import type { FileEntryItem } from '@/api/upload'
 import { uploadFileWithCategory } from '@/utils/fileUploader'
 import { useAuthStore } from '@/stores/auth'
@@ -102,10 +102,12 @@ export const useFileStore = defineStore('file', () => {
     const entries = ref<FileEntryItem[]>([])
     const breadcrumbs = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: '我的文件' }])
     const currentParentId = ref<number | null>(null)
+    const currentParent = ref<FileEntryItem | null>(null)
     const loadingEntries = ref(false)
 
     const uploadTasks = ref<UploadTaskItem[]>([])
     const pauseAllRequested = ref(false)
+    const isUploadQueueRunning = ref(false)
     const isRestoringUploadTasks = ref(true)
     const autoResumePausedOnReload = ref(localStorage.getItem(AUTO_RESUME_PAUSED_KEY) === '1')
 
@@ -118,6 +120,21 @@ export const useFileStore = defineStore('file', () => {
     const activeUploadingCount = computed(() => uploadTasks.value.filter((item) => item.status === 'uploading').length)
     const resumableCount = computed(() => uploadTasks.value.filter((item) => item.status === 'paused' || item.status === 'failed').length)
     const pausedCount = computed(() => uploadTasks.value.filter((item) => item.status === 'paused').length)
+    const hasStartedUpload = computed(() => uploadTasks.value.some((item) => item.status !== 'pending'))
+    const hasIncompleteTasks = computed(() =>
+        uploadTasks.value.some(
+            (item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'paused' || item.status === 'failed',
+        ),
+    )
+    const canResumeAll = computed(() =>
+        uploadTasks.value.some((item) => item.status === 'pending' || item.status === 'paused' || item.status === 'failed'),
+    )
+    const canPauseAll = computed(() => isUploadQueueRunning.value && hasStartedUpload.value && hasIncompleteTasks.value)
+    const canCancelAll = computed(() =>
+        uploadTasks.value.some(
+            (item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'paused' || item.status === 'failed',
+        ),
+    )
 
     const loadEntries = async (parentId?: number | null) => {
         loadingEntries.value = true
@@ -126,6 +143,7 @@ export const useFileStore = defineStore('file', () => {
             const { data } = await getFileEntriesApi(targetParentId)
             entries.value = data.items
             breadcrumbs.value = data.breadcrumbs
+            currentParent.value = data.parent
             currentParentId.value = data.parent?.id ?? null
         } finally {
             loadingEntries.value = false
@@ -150,13 +168,26 @@ export const useFileStore = defineStore('file', () => {
     }
 
     const deleteEntry = async (id: number) => {
-        await deleteFileEntryApi(id)
+        const { data } = await deleteFileEntryApi(id)
         await loadEntries(currentParentId.value)
+        return data
     }
 
     const renameEntry = async (id: number, name: string) => {
         await renameFileEntryApi({ id, name })
         await loadEntries(currentParentId.value)
+    }
+
+    const restoreRecycleEntry = async (id: number) => {
+        const { data } = await restoreRecycleBinEntryApi(id)
+        await loadEntries(currentParentId.value)
+        return data
+    }
+
+    const clearRecycleBinEntries = async (ids?: number[]) => {
+        const { data } = await clearRecycleBinApi(ids)
+        await loadEntries(currentParentId.value)
+        return data
     }
 
     const addUploadFiles = (files: File[], parentId?: number | null) => {
@@ -187,8 +218,12 @@ export const useFileStore = defineStore('file', () => {
     const runTaskUpload = async (taskId: string) => {
         const authStore = useAuthStore()
         const task = getTaskById(taskId)
-        if (!task || !authStore.accessToken) {
+        if (!task) {
             return
+        }
+
+        if (!authStore.accessToken) {
+            throw new Error('登录状态已失效，请重新登录后继续上传')
         }
 
         if (!task.file) {
@@ -207,16 +242,16 @@ export const useFileStore = defineStore('file', () => {
                 parentId: task.parentId,
                 relativePath: task.relativePath,
                 onHashProgress: (progress) => {
-                    task.hashProgress = progress
-                    task.progress = calcOverallProgress(task)
+                    task.hashProgress = Math.max(task.hashProgress, progress)
+                    task.progress = Math.max(task.progress, calcOverallProgress(task))
                 },
                 onChunkProgress: (progress) => {
-                    task.chunkProgress = progress
-                    task.progress = calcOverallProgress(task)
+                    task.chunkProgress = Math.max(task.chunkProgress, progress)
+                    task.progress = Math.max(task.progress, calcOverallProgress(task))
                 },
                 onMergeProgress: (progress) => {
-                    task.mergeProgress = progress
-                    task.progress = calcOverallProgress(task)
+                    task.mergeProgress = Math.max(task.mergeProgress, progress)
+                    task.progress = Math.max(task.progress, calcOverallProgress(task))
                 },
                 shouldPause: () => task.status === 'paused',
                 shouldCancel: () => task.status === 'canceled',
@@ -249,15 +284,23 @@ export const useFileStore = defineStore('file', () => {
 
     const startPendingUploads = async () => {
         pauseAllRequested.value = false
-        for (const task of uploadTasks.value) {
-            if (pauseAllRequested.value) {
-                break
+        isUploadQueueRunning.value = true
+        let startedCount = 0
+        try {
+            for (const task of uploadTasks.value) {
+                if (pauseAllRequested.value) {
+                    break
+                }
+                if (task.status === 'pending' || task.status === 'failed') {
+                    startedCount += 1
+                    // eslint-disable-next-line no-await-in-loop
+                    await runTaskUpload(task.id)
+                }
             }
-            if (task.status === 'pending' || task.status === 'failed') {
-                // eslint-disable-next-line no-await-in-loop
-                await runTaskUpload(task.id)
-            }
+        } finally {
+            isUploadQueueRunning.value = false
         }
+        return startedCount
     }
 
     const pauseTask = (taskId: string) => {
@@ -270,6 +313,7 @@ export const useFileStore = defineStore('file', () => {
 
     const pauseAllTasks = () => {
         pauseAllRequested.value = true
+        isUploadQueueRunning.value = false
         uploadTasks.value.forEach((task) => {
             if (task.status === 'uploading') {
                 task.status = 'paused'
@@ -278,31 +322,51 @@ export const useFileStore = defineStore('file', () => {
     }
 
     const resumeAllTasks = async () => {
-        pauseAllRequested.value = false
+        let hasResumable = false
         for (const task of uploadTasks.value) {
             if (task.status === 'paused' || task.status === 'failed') {
-                // eslint-disable-next-line no-await-in-loop
-                await runTaskUpload(task.id)
+                task.status = 'pending'
+                task.errorMessage = ''
+                hasResumable = true
             }
         }
+
+        const hasPending = uploadTasks.value.some((task) => task.status === 'pending')
+        if (!hasResumable && !hasPending) {
+            return 0
+        }
+
+        return startPendingUploads()
     }
 
     const resumePausedTasks = async () => {
-        pauseAllRequested.value = false
+        let hasPaused = false
         for (const task of uploadTasks.value) {
             if (task.status === 'paused') {
-                // eslint-disable-next-line no-await-in-loop
-                await runTaskUpload(task.id)
+                task.status = 'pending'
+                task.errorMessage = ''
+                hasPaused = true
             }
         }
+
+        if (!hasPaused) {
+            return 0
+        }
+
+        return startPendingUploads()
     }
 
     const resumeTask = async (taskId: string) => {
         const task = getTaskById(taskId)
         if (!task) return
         pauseAllRequested.value = false
-        if (task.status === 'paused' || task.status === 'failed') {
-            await runTaskUpload(taskId)
+        if (task.status === 'paused' || task.status === 'failed' || task.status === 'pending') {
+            isUploadQueueRunning.value = true
+            try {
+                await runTaskUpload(taskId)
+            } finally {
+                isUploadQueueRunning.value = false
+            }
         }
     }
 
@@ -310,6 +374,19 @@ export const useFileStore = defineStore('file', () => {
         const task = getTaskById(taskId)
         if (!task) return
         task.status = 'canceled'
+    }
+
+    const cancelAllTasks = () => {
+        pauseAllRequested.value = true
+        isUploadQueueRunning.value = false
+        let canceledCount = 0
+        uploadTasks.value.forEach((task) => {
+            if (task.status === 'pending' || task.status === 'uploading' || task.status === 'paused' || task.status === 'failed') {
+                task.status = 'canceled'
+                canceledCount += 1
+            }
+        })
+        return canceledCount
     }
 
     const clearFinishedTasks = () => {
@@ -366,12 +443,16 @@ export const useFileStore = defineStore('file', () => {
         entries,
         breadcrumbs,
         currentParentId,
+        currentParent,
         loadingEntries,
         uploadTasks,
         overallUploadProgress,
         activeUploadingCount,
         resumableCount,
         pausedCount,
+        canResumeAll,
+        canPauseAll,
+        canCancelAll,
         autoResumePausedOnReload,
         loadEntries,
         enterFolder,
@@ -379,6 +460,8 @@ export const useFileStore = defineStore('file', () => {
         createFolder,
         deleteEntry,
         renameEntry,
+        restoreRecycleEntry,
+        clearRecycleBinEntries,
         addUploadFiles,
         runTaskUpload,
         startPendingUploads,
@@ -388,6 +471,7 @@ export const useFileStore = defineStore('file', () => {
         resumePausedTasks,
         resumeTask,
         cancelTask,
+        cancelAllTasks,
         clearFinishedTasks,
         setAutoResumePausedOnReload,
     }

@@ -8,7 +8,12 @@
             </a-breadcrumb>
 
             <a-space>
-                <a-button type="primary" @click="openCreateFolder">新建文件夹</a-button>
+                <template v-if="isRecycleBinView">
+                    <a-button @click="restoreSelected" :disabled="selectedRecycleIds.length === 0">批量还原</a-button>
+                    <a-button danger @click="clearSelected" :disabled="selectedRecycleIds.length === 0">批量彻底删除</a-button>
+                    <a-button danger @click="clearAllRecycleBin">清空回收站</a-button>
+                </template>
+                <a-button v-else type="primary" @click="openCreateFolder">新建文件夹</a-button>
                 <a-button @click="refresh">刷新</a-button>
             </a-space>
         </a-space>
@@ -28,7 +33,14 @@
             <a-button @click="resetSearch" :loading="searchLoading">重置</a-button>
         </a-space>
 
-        <a-table :columns="columns" :data-source="tableData" row-key="id" :loading="fileStore.loadingEntries || searchLoading" :pagination="{ pageSize: 12 }">
+        <a-table
+            :columns="columns"
+            :data-source="tableData"
+            row-key="id"
+            :loading="fileStore.loadingEntries || searchLoading"
+            :pagination="{ pageSize: 12 }"
+            :row-selection="rowSelection"
+        >
             <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'name'">
                     <FileNameCell :name="record.display_name" :is-dir="record.is_dir" :clickable="record.is_dir" @click="enterFolder(record)" />
@@ -40,16 +52,23 @@
                     <span>{{ record.is_dir ? '-' : formatFileSize(record.file_size) }}</span>
                 </template>
                 <template v-else-if="column.key === 'type'">
-                    <a-tag :color="record.is_dir ? 'blue' : 'green'">{{ record.is_dir ? '文件夹' : '文件' }}</a-tag>
+                    <a-tag :color="record.is_recycle_bin ? 'orange' : record.is_dir ? 'blue' : 'green'">
+                        {{ record.is_recycle_bin ? '回收站' : record.is_dir ? '文件夹' : '文件' }}
+                    </a-tag>
                 </template>
                 <template v-else-if="column.key === 'updated_at'">
                     <span>{{ formatDateTime(record.updated_at) }}</span>
                 </template>
                 <template v-else-if="column.key === 'actions'">
                     <a-space>
-                        <a @click="openRename(record)">编辑</a>
+                        <a v-if="isRecycleBinView" @click="restoreItem(record.id)">还原</a>
+                        <a v-else-if="!record.is_system" @click="openRename(record)">编辑</a>
                         <a v-if="!record.is_dir && record.url" :href="record.url" target="_blank" rel="noopener noreferrer">查看</a>
-                        <a-popconfirm title="确认删除？" @confirm="onDelete(record.id)">
+                        <a-popconfirm
+                            v-if="isRecycleBinView || !record.is_system"
+                            :title="isRecycleBinView ? '确认彻底删除？' : '确认删除？'"
+                            @confirm="onDelete(record.id)"
+                        >
                             <a style="color: #ff4d4f">删除</a>
                         </a-popconfirm>
                     </a-space>
@@ -85,6 +104,7 @@ const newFolderName = ref('')
 const renameOpen = ref(false)
 const renameName = ref('')
 const renameId = ref<number | null>(null)
+const selectedRecycleIds = ref<number[]>([])
 
 // 搜索相关
 const searchKeyword = ref('')
@@ -125,11 +145,26 @@ const tableData = computed<Array<FileEntryItem | SearchFileEntryItem>>(() => {
     return isSearchMode.value ? searchResults.value : fileStore.entries
 })
 
+const isRecycleBinView = computed(() => !isSearchMode.value && Boolean(fileStore.currentParent?.is_recycle_bin))
+
+const rowSelection = computed(() => {
+    if (!isRecycleBinView.value) {
+        return undefined
+    }
+    return {
+        selectedRowKeys: selectedRecycleIds.value,
+        onChange: (keys: Array<string | number>) => {
+            selectedRecycleIds.value = keys.map((item) => Number(item)).filter((item) => Number.isInteger(item))
+        },
+    }
+})
+
 const clearSearchState = () => {
     searchKeyword.value = ''
     suggestResults.value = []
     searchResults.value = []
     isSearchMode.value = false
+    selectedRecycleIds.value = []
 }
 
 // 计算搜索建议选项
@@ -244,6 +279,7 @@ const refresh = async () => {
         return
     }
     await fileStore.loadEntries(fileStore.currentParentId)
+    selectedRecycleIds.value = []
 }
 
 const goToBreadcrumb = async (id: number | null) => {
@@ -284,10 +320,62 @@ const submitCreateFolder = async () => {
 
 const onDelete = async (id: number) => {
     try {
-        await fileStore.deleteEntry(id)
-        message.success('删除成功')
+        const result = await fileStore.deleteEntry(id)
+        selectedRecycleIds.value = selectedRecycleIds.value.filter((item) => item !== id)
+        message.success(result.detail || (isRecycleBinView.value ? '已彻底删除' : '已移入回收站'))
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '删除失败'))
+    }
+}
+
+const restoreItem = async (id: number) => {
+    try {
+        await fileStore.restoreRecycleEntry(id)
+        selectedRecycleIds.value = selectedRecycleIds.value.filter((item) => item !== id)
+        message.success('已还原')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '还原失败'))
+    }
+}
+
+const restoreSelected = async () => {
+    if (selectedRecycleIds.value.length === 0) {
+        message.info('请先选择要还原的文件')
+        return
+    }
+    try {
+        for (const id of selectedRecycleIds.value.slice()) {
+            // eslint-disable-next-line no-await-in-loop
+            await fileStore.restoreRecycleEntry(id)
+        }
+        selectedRecycleIds.value = []
+        message.success('已批量还原')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '批量还原失败'))
+    }
+}
+
+const clearSelected = async () => {
+    if (selectedRecycleIds.value.length === 0) {
+        message.info('请先选择要删除的文件')
+        return
+    }
+    try {
+        await fileStore.clearRecycleBinEntries(selectedRecycleIds.value)
+        selectedRecycleIds.value = []
+        message.success('已批量彻底删除')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '批量删除失败'))
+    }
+}
+
+const clearAllRecycleBin = async () => {
+    try {
+        await fileStore.clearRecycleBinEntries()
+        selectedRecycleIds.value = []
+        message.success('回收站已清空')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '清空回收站失败'))
     }
 }
 

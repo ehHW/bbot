@@ -172,6 +172,51 @@ export const routes: RouteRecordRaw[] = [
                     permissionCode: 'user.view_user',
                 },
             },
+            {
+                path: '/entertainment',
+                name: 'Entertainment',
+                component: () => import('@/views/Entertainment/index.vue'),
+                redirect: '/entertainment/game',
+                meta: {
+                    title: '娱乐中心',
+                    requiresAuth: true,
+                    menu: true,
+                    menuTitle: '娱乐中心',
+                    menuIcon: 'appstore',
+                },
+                children: [
+                    {
+                        path: 'game',
+                        name: 'EntertainmentGame',
+                        component: () => import('@/views/Entertainment/Game/index.vue'),
+                        redirect: '/entertainment/game/2048',
+                        meta: {
+                            title: '游戏',
+                            requiresAuth: true,
+                        },
+                        children: [
+                            {
+                                path: '2048',
+                                name: 'EntertainmentGame2048',
+                                component: () => import('@/views/Entertainment/Game/Game2048View.vue'),
+                                meta: {
+                                    title: '2048',
+                                    requiresAuth: true,
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        path: 'music',
+                        name: 'EntertainmentMusic',
+                        component: () => import('@/views/Entertainment/Music/index.vue'),
+                        meta: {
+                            title: '音乐',
+                            requiresAuth: true,
+                        },
+                    },
+                ],
+            },
         ],
     },
     {

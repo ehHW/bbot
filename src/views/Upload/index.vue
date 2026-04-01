@@ -3,9 +3,10 @@
         <a-space style="margin-bottom: 12px" wrap>
             <a-button type="primary" @click="pickFiles">选择文件</a-button>
             <a-button @click="pickFolder">选择文件夹</a-button>
-            <a-button @click="startAll">开始上传全部</a-button>
-            <a-button :disabled="fileStore.resumableCount === 0" @click="resumeAll">全部继续</a-button>
-            <a-button :disabled="fileStore.activeUploadingCount === 0" @click="pauseAll">全部暂停</a-button>
+            <a-button @click="startAll">开始上传</a-button>
+            <a-button :disabled="!fileStore.canResumeAll" @click="resumeAll">全部继续</a-button>
+            <a-button :disabled="!fileStore.canPauseAll" @click="pauseAll">全部暂停</a-button>
+            <a-button danger :disabled="!fileStore.canCancelAll" @click="cancelAll">全部取消</a-button>
             <a-button @click="clearFinished">清理已完成</a-button>
             <a-space>
                 <span>刷新后自动继续暂停任务</span>
@@ -162,7 +163,7 @@ const confirmUploadToCurrentFolder = async () => {
     fileStore.addUploadFiles(waitingFiles.value, fileStore.currentParentId)
     waitingFiles.value = []
     selectTargetOpen.value = false
-    message.success('已加入上传队列，请点击“开始上传全部”')
+    message.success('已加入上传队列，请点击“开始上传”')
 }
 
 const startAll = async () => {
@@ -175,8 +176,12 @@ const startAll = async () => {
 
 const resumeAll = async () => {
     try {
-        await fileStore.resumeAllTasks()
-        message.success('已继续全部可恢复任务')
+        const startedCount = await fileStore.resumeAllTasks()
+        if (startedCount > 0) {
+            message.success(`已继续 ${startedCount} 个任务`)
+            return
+        }
+        message.info('当前没有可继续的任务')
     } catch (error: unknown) {
         message.error(String((error as { message?: string })?.message || '继续任务失败'))
     }
@@ -185,6 +190,15 @@ const resumeAll = async () => {
 const pauseAll = () => {
     fileStore.pauseAllTasks()
     message.success('已暂停全部上传任务')
+}
+
+const cancelAll = () => {
+    const canceledCount = fileStore.cancelAllTasks()
+    if (canceledCount > 0) {
+        message.success(`已取消 ${canceledCount} 个任务`)
+        return
+    }
+    message.info('当前没有可取消的任务')
 }
 
 const onToggleAutoResume = (checked: boolean) => {

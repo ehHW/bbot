@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import {
     ApiOutlined,
+    AppstoreOutlined,
     BellOutlined,
     HomeOutlined,
     LockOutlined,
@@ -45,7 +46,7 @@ import { useSettingsStore } from '@/stores/settings'
 interface MenuMeta {
     menu?: boolean
     menuTitle?: string
-    menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'api' | 'upload' | 'user' | 'team' | 'safety' | 'message'
+    menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'api' | 'upload' | 'user' | 'team' | 'safety' | 'message' | 'appstore'
     menuSettingKey?: 'showRealtimeMenu'
     permissionCode?: string
 }
@@ -61,6 +62,7 @@ const iconMap = {
     team: TeamOutlined,
     safety: SafetyCertificateOutlined,
     message: BellOutlined,
+    appstore: AppstoreOutlined,
 }
 
 const collapsed = ref<boolean>(true)

@@ -12,10 +12,16 @@ export interface FileEntryItem {
     url: string
     created_at: string
     updated_at: string
+    is_system: boolean
+    is_recycle_bin: boolean
+    recycled_at: string | null
+    expires_at: string | null
+    remaining_days: number | null
+    recycle_original_parent_id: number | null
 }
 
 export interface FileEntriesResponse {
-    parent: { id: number; display_name: string } | null
+    parent: FileEntryItem | null
     breadcrumbs: Array<{ id: number | null; name: string }>
     items: FileEntryItem[]
 }
@@ -27,6 +33,10 @@ export interface SearchFileEntryItem extends FileEntryItem {
 
 export interface SearchFileEntriesResponse {
     items: SearchFileEntryItem[]
+}
+
+export interface RecycleBinEntriesResponse {
+    items: FileEntryItem[]
 }
 
 export interface UploadPrecheckPayload {
@@ -55,12 +65,27 @@ export const searchFileEntriesApi = (keyword: string, limit: number = 50) => {
     })
 }
 
+export const getRecycleBinEntriesApi = () => {
+    return instance.get<RecycleBinEntriesResponse>('upload/recycle-bin/')
+}
+
+export const restoreRecycleBinEntryApi = (id: number) => {
+    return instance.post<{ detail: string; item: FileEntryItem }>('upload/recycle-bin/restore/', { id })
+}
+
+export const clearRecycleBinApi = (ids?: number[]) => {
+    return instance.post<{ detail: string; removed_db_files: number; removed_db_dirs: number; removed_disk_files: number }>(
+        'upload/recycle-bin/clear/',
+        { ids },
+    )
+}
+
 export const createFolderApi = (payload: { name: string; parent_id?: number | null }) => {
     return instance.post<FileEntryItem>('upload/folders/', payload)
 }
 
 export const deleteFileEntryApi = (id: number) => {
-    return instance.post<{ detail: string }>('upload/delete/', { id })
+    return instance.post<{ detail: string; moved_count?: number; removed_db_files?: number; removed_db_dirs?: number; removed_disk_files?: number }>('upload/delete/', { id })
 }
 
 export const renameFileEntryApi = (payload: { id: number; name: string }) => {
