@@ -33,6 +33,7 @@ export const routes: RouteRecordRaw[] = [
                     menu: true,
                     menuTitle: '首页',
                     menuIcon: 'home',
+                    menuOrder: 1,
                 },
             },
             // {
@@ -55,6 +56,7 @@ export const routes: RouteRecordRaw[] = [
                     menuTitle: '用户管理',
                     menuIcon: 'user',
                     permissionCode: 'user.view_user',
+                    menuOrder: 7,
                 },
             },
             // {
@@ -77,6 +79,7 @@ export const routes: RouteRecordRaw[] = [
                     menuTitle: '角色管理',
                     menuIcon: 'team',
                     permissionCode: 'user.view_role',
+                    menuOrder: 8,
                 },
             },
             // {
@@ -99,25 +102,26 @@ export const routes: RouteRecordRaw[] = [
                     menuTitle: '权限管理',
                     menuIcon: 'safety',
                     permissionCode: 'user.view_permission',
+                    menuOrder: 9,
                 },
             },
             {
-                path: '/realtime-center',
-                name: 'RealtimeCenter',
-                component: () => import('@/views/Console/index.vue'),
+                path: '/chat-center',
+                name: 'ChatCenter',
+                component: () => import('@/views/Chat/index.vue'),
                 meta: {
-                    title: '实时消息',
+                    title: '聊天室',
                     requiresAuth: true,
                     menu: true,
-                    menuTitle: '实时消息',
-                    menuIcon: 'message',
-                    menuSettingKey: 'showRealtimeMenu',
+                    menuTitle: '聊天室',
+                    menuIcon: 'chat',
                     permissionCode: 'user.view_user',
+                    menuOrder: 6,
                 },
             },
             {
                 path: '/ws-test',
-                redirect: '/realtime-center',
+                redirect: '/chat-center',
                 meta: {
                     requiresAuth: true,
                 },
@@ -132,6 +136,7 @@ export const routes: RouteRecordRaw[] = [
                     menu: true,
                     menuTitle: '设置',
                     menuIcon: 'tool',
+                    menuOrder: 11,
                 },
             },
             {
@@ -144,6 +149,7 @@ export const routes: RouteRecordRaw[] = [
                     menu: true,
                     menuTitle: '个人中心',
                     menuIcon: 'user',
+                    menuOrder: 10,
                 },
             },
             {
@@ -155,8 +161,9 @@ export const routes: RouteRecordRaw[] = [
                     requiresAuth: true,
                     menu: true,
                     menuTitle: '文件管理',
-                    menuIcon: 'api',
+                    menuIcon: 'file',
                     permissionCode: 'user.view_user',
+                    menuOrder: 2,
                 },
             },
             {
@@ -170,6 +177,7 @@ export const routes: RouteRecordRaw[] = [
                     menuTitle: '上传任务',
                     menuIcon: 'upload',
                     permissionCode: 'user.view_user',
+                    menuOrder: 3,
                 },
             },
             {
@@ -182,7 +190,8 @@ export const routes: RouteRecordRaw[] = [
                     requiresAuth: true,
                     menu: true,
                     menuTitle: '娱乐中心',
-                    menuIcon: 'appstore',
+                    menuIcon: 'trophy',
+                    menuOrder: 4,
                 },
                 children: [
                     {
@@ -193,6 +202,10 @@ export const routes: RouteRecordRaw[] = [
                         meta: {
                             title: '游戏',
                             requiresAuth: true,
+                            menu: true,
+                            menuTitle: '游戏',
+                            menuIcon: 'appstore',
+                            menuOrder: 1,
                         },
                         children: [
                             {
@@ -202,6 +215,10 @@ export const routes: RouteRecordRaw[] = [
                                 meta: {
                                     title: '2048',
                                     requiresAuth: true,
+                                    menu: true,
+                                    menuTitle: '2048',
+                                    menuIcon: 'trophy',
+                                    menuOrder: 1,
                                 },
                             },
                         ],
@@ -213,6 +230,10 @@ export const routes: RouteRecordRaw[] = [
                         meta: {
                             title: '音乐',
                             requiresAuth: true,
+                            menu: true,
+                            menuTitle: '音乐',
+                            menuIcon: 'music',
+                            menuOrder: 2,
                         },
                     },
                 ],

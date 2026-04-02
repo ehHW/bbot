@@ -1,9 +1,9 @@
 <template>
     <div class="game-container">
-        <h1 class="score">Score: {{ score }}</h1>
+        <h1 class="score">Score: {{ displayedScore }}</h1>
         <div class="button-container">
-            <button class="game-button" @click="newGame">新游戏</button>
-            <button class="game-button" :disabled="history.length <= 1 || isAnimating" @click="undo">撤销</button>
+            <button class="game-button" :disabled="readonlyMode" @click="newGame">新游戏</button>
+            <button class="game-button" :disabled="history.length <= 1 || isAnimating || readonlyMode" @click="undo">撤销</button>
         </div>
 
         <div class="board" @touchstart="handleTouchStart" @touchend="handleTouchEnd">
@@ -12,7 +12,7 @@
             </div>
 
             <div
-                v-for="tile in tiles"
+                v-for="tile in renderedTiles"
                 :key="tile.id"
                 class="tile"
                 :style="tileStyle(tile)"
@@ -28,8 +28,25 @@
 <script lang="ts" setup>
 import { message } from 'ant-design-vue'
 import { storeToRefs } from 'pinia'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { type Game2048Tile as Tile, useGameStore } from '@/stores/game'
+
+const props = withDefaults(
+    defineProps<{
+        previewBoardSnapshot?: number[][] | null
+        previewScore?: number | null
+        readonlyMode?: boolean
+    }>(),
+    {
+        previewBoardSnapshot: null,
+        previewScore: null,
+        readonlyMode: false,
+    },
+)
+
+const emit = defineEmits<{
+    (e: 'game-over', payload: { score: number; boardSnapshot: number[][] }): void
+}>()
 
 type Direction = 'up' | 'down' | 'left' | 'right'
 
@@ -49,6 +66,39 @@ const gameStore = useGameStore()
 const { score, tiles, history, isAnimating, nextTileId } = storeToRefs(gameStore)
 const touchStartX = ref(0)
 const touchStartY = ref(0)
+const readonlyMode = computed(() => Boolean(props.readonlyMode))
+
+function previewCellValue(snapshot: number[][], row: number, col: number): number {
+    return snapshot[row]?.[col] ?? 0
+}
+
+function buildPreviewTiles(snapshot: number[][]): Tile[] {
+    const result: Tile[] = []
+    let id = 1
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+        for (let col = 0; col < BOARD_SIZE; col += 1) {
+            const value = previewCellValue(snapshot, row, col)
+            if (value <= 0) continue
+            result.push({ id, value, row, col, isNew: false, isMerged: false })
+            id += 1
+        }
+    }
+    return result
+}
+
+const renderedTiles = computed(() => {
+    if (readonlyMode.value && props.previewBoardSnapshot) {
+        return buildPreviewTiles(props.previewBoardSnapshot)
+    }
+    return tiles.value
+})
+
+const displayedScore = computed(() => {
+    if (readonlyMode.value && props.previewScore !== null) {
+        return props.previewScore
+    }
+    return score.value
+})
 
 function cloneTiles(source: Tile[]): Tile[] {
     return source.map((tile) => ({ ...tile, isNew: false, isMerged: false }))
@@ -152,6 +202,12 @@ function canMove(): boolean {
     return false
 }
 
+function buildBoardSnapshot(): number[][] {
+    return Array.from({ length: BOARD_SIZE }, (_, row) =>
+        Array.from({ length: BOARD_SIZE }, (_, col) => getCellValue(row, col)),
+    )
+}
+
 function finalizeAnimation(nextScore: number) {
     window.setTimeout(() => {
         clearTileFlags()
@@ -160,13 +216,17 @@ function finalizeAnimation(nextScore: number) {
         isAnimating.value = false
 
         if (!canMove()) {
+            emit('game-over', {
+                score: nextScore,
+                boardSnapshot: buildBoardSnapshot(),
+            })
             message.warning('Game Over')
         }
     }, ANIMATION_MS)
 }
 
 function move(direction: Direction) {
-    if (isAnimating.value) {
+    if (isAnimating.value || readonlyMode.value) {
         return
     }
 
@@ -220,6 +280,10 @@ function move(direction: Direction) {
 }
 
 function newGame() {
+    if (readonlyMode.value) {
+        return
+    }
+
     nextTileId.value = 1
     score.value = 0
     tiles.value = []
@@ -231,7 +295,7 @@ function newGame() {
 }
 
 function undo() {
-    if (history.value.length <= 1 || isAnimating.value) {
+    if (history.value.length <= 1 || isAnimating.value || readonlyMode.value) {
         return
     }
 
@@ -256,6 +320,10 @@ function tileStyle(tile: Tile) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+    if (readonlyMode.value) {
+        return
+    }
+
     switch (event.key.toLowerCase()) {
         case 'arrowup':
         case 'w':
@@ -283,6 +351,10 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 function handleTouchStart(event: TouchEvent) {
+    if (readonlyMode.value) {
+        return
+    }
+
     const touch = event.changedTouches[0]
     if (!touch) {
         return
@@ -292,6 +364,10 @@ function handleTouchStart(event: TouchEvent) {
 }
 
 function handleTouchEnd(event: TouchEvent) {
+    if (readonlyMode.value) {
+        return
+    }
+
     const touch = event.changedTouches[0]
     if (!touch) {
         return
@@ -312,6 +388,12 @@ function handleTouchEnd(event: TouchEvent) {
 }
 
 onMounted(() => {
+    isAnimating.value = false
+    if (tiles.value.length > 0) {
+        clearTileFlags()
+        nextTileId.value = Math.max(nextTileId.value, ...tiles.value.map((tile) => tile.id))
+    }
+
     if (tiles.value.length === 0 || history.value.length === 0) {
         newGame()
     }

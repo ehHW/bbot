@@ -10,7 +10,7 @@ import { RouterView } from 'vue-router'
 
 <style scoped>
 .main {
-    height: calc(100vh - 94px);
+    height: calc(100vh - 80px);
     padding: 5px 5px 0;
     overflow: hidden;
 }

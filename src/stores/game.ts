@@ -29,4 +29,6 @@ export const useGameStore = defineStore('game', () => {
         isAnimating,
         nextTileId,
     }
+}, {
+    persist: true,
 })

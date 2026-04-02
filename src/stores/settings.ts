@@ -4,14 +4,12 @@ import { computed, ref } from 'vue'
 export interface AppSettings {
     systemTitle: string
     menuHoverExpandDelayMs: number
-    showRealtimeMenu: boolean
     themeMode: 'light' | 'dark'
 }
 
 const defaultSettings: AppSettings = {
     systemTitle: 'Bbot 管理后台',
     menuHoverExpandDelayMs: 300,
-    showRealtimeMenu: true,
     themeMode: 'light',
 }
 
@@ -26,8 +24,6 @@ export const useSettingsStore = defineStore(
                 ...next,
                 menuHoverExpandDelayMs: normalizeDelay(next.menuHoverExpandDelayMs ?? settings.value.menuHoverExpandDelayMs),
                 themeMode: normalizeThemeMode(next.themeMode ?? settings.value.themeMode),
-                showRealtimeMenu:
-                    typeof next.showRealtimeMenu === 'boolean' ? next.showRealtimeMenu : settings.value.showRealtimeMenu,
             }
         }
 
@@ -37,14 +33,12 @@ export const useSettingsStore = defineStore(
 
         const systemTitle = computed(() => settings.value.systemTitle)
         const menuHoverExpandDelayMs = computed(() => settings.value.menuHoverExpandDelayMs)
-        const showRealtimeMenu = computed(() => settings.value.showRealtimeMenu)
         const themeMode = computed(() => settings.value.themeMode)
 
         return {
             settings,
             systemTitle,
             menuHoverExpandDelayMs,
-            showRealtimeMenu,
             themeMode,
             save,
             reset,

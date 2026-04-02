@@ -12,6 +12,7 @@
 .game-layout {
     min-height: 100%;
     padding: 16px;
+    background: transparent;
 }
 
 .game-content {

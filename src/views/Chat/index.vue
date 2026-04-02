@@ -1,5 +1,5 @@
 <template>
-    <a-card class="console" title="全局实时消息">
+    <a-card class="chat" title="聊天室（预留）">
         <a-alert :type="connected ? 'success' : 'warning'" :message="connected ? `已连接（${status}）` : `未连接（${status}）`" show-icon />
         <div class="toolbar">
             <a-input v-model:value="text" placeholder="输入要发送的消息" />
@@ -36,8 +36,8 @@ const sendMessage = () => {
 </script>
 
 <style scoped>
-.console {
-    height: calc(100vh - 115px);
+.chat {
+    height: 100%;
 }
 
 .toolbar {

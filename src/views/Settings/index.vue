@@ -13,9 +13,6 @@
             <a-form-item label="菜单悬停展开延时（毫秒）">
                 <a-input-number v-model:value="formState.menuHoverExpandDelayMs" :min="100" :max="2000" :step="50" />
             </a-form-item>
-            <a-form-item label="显示实时消息菜单">
-                <a-switch v-model:checked="formState.showRealtimeMenu" />
-            </a-form-item>
 
             <a-space>
                 <a-button type="primary" @click="saveSettings">保存</a-button>
@@ -35,7 +32,6 @@ const settingsStore = useSettingsStore()
 const formState = reactive({
     systemTitle: '',
     menuHoverExpandDelayMs: 300,
-    showRealtimeMenu: true,
     themeMode: 'light' as 'light' | 'dark',
 })
 
@@ -47,7 +43,6 @@ const themeOptions = [
 const syncFromStore = () => {
     formState.systemTitle = settingsStore.settings.systemTitle
     formState.menuHoverExpandDelayMs = settingsStore.settings.menuHoverExpandDelayMs
-    formState.showRealtimeMenu = settingsStore.settings.showRealtimeMenu
     formState.themeMode = settingsStore.settings.themeMode
 }
 
@@ -55,7 +50,6 @@ const saveSettings = () => {
     settingsStore.save({
         systemTitle: formState.systemTitle.trim() || 'Bbot 管理后台',
         menuHoverExpandDelayMs: formState.menuHoverExpandDelayMs,
-        showRealtimeMenu: formState.showRealtimeMenu,
         themeMode: formState.themeMode,
     })
     syncFromStore()
