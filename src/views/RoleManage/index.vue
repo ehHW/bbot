@@ -1,5 +1,5 @@
 <template>
-    <a-card title="角色管理">
+    <a-card>
         <a-space style="margin-bottom: 12px; width: 100%; justify-content: space-between">
             <a-space>
                 <a-input v-model:value="keyword" placeholder="按角色名/描述/权限搜索" style="width: 260px" allow-clear @press-enter="onSearch" />
@@ -208,7 +208,7 @@ onMounted(async () => {
 
 <style scoped>
 .ant-card {
-    height: calc(100vh - 115px);
+    height: 100%;
 }
 
 :deep(.ant-card-body) {

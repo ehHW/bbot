@@ -1,5 +1,5 @@
 <template>
-    <a-card title="首页">
+    <a-card>
         <p>欢迎回来，{{ userStore.user?.display_name || userStore.user?.username || '-' }}</p>
         <p>当前角色：</p>
         <a-space wrap>
@@ -17,6 +17,6 @@ const userStore = useUserStore()
 
 <style scoped>
 .ant-card {
-    min-height: calc(100vh - 115px);
+    min-height: 100%;
 }
 </style>

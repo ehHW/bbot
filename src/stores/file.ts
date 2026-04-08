@@ -86,6 +86,42 @@ const normalizeTaskRelativePath = (file: File): string => {
     return raw.replace(/\\/g, '/').replace(/^\/+/, '')
 }
 
+const cloneUploadFileSnapshot = async (file: File): Promise<File> => {
+    let buffer: ArrayBuffer
+    try {
+        buffer = await file.arrayBuffer()
+    } catch {
+        throw new Error('读取源文件失败，文件可能正在被其他程序占用或持续写入；请先复制一份稳定文件后再上传')
+    }
+    const snapshot = new File([buffer], file.name, {
+        type: file.type,
+        lastModified: file.lastModified,
+    }) as File & { webkitRelativePath?: string }
+    const relativePath = normalizeTaskRelativePath(file)
+    Object.defineProperty(snapshot, 'webkitRelativePath', {
+        configurable: true,
+        enumerable: false,
+        value: relativePath,
+    })
+    return snapshot
+}
+
+const resolveUploadErrorMessage = (error: unknown) => {
+    const maybeError = error as {
+        message?: string
+        response?: unknown
+        request?: unknown
+    }
+    const message = String(maybeError?.message || '')
+    if (message.includes('ERR_UPLOAD_FILE_CHANGED')) {
+        return '源文件在上传过程中被外部程序改动，已中断上传；请重新选择文件或先复制一份再上传'
+    }
+    if (message === 'Network Error' && !maybeError?.response && maybeError?.request) {
+        return '上传过程中发生网络中断；如果源文件是日志等正在写入的文件，也可能是浏览器检测到文件已变化，请先复制一份稳定文件后再上传'
+    }
+    return message || '上传失败'
+}
+
 const pickDisplayName = (relativePath: string, fileName: string): string => {
     const normalized = (relativePath || '').split('/').filter(Boolean)
     if (normalized.length === 0) {
@@ -190,9 +226,10 @@ export const useFileStore = defineStore('file', () => {
         return data
     }
 
-    const addUploadFiles = (files: File[], parentId?: number | null) => {
+    const addUploadFiles = async (files: File[], parentId?: number | null) => {
         const normalizedParentId = parentId ?? currentParentId.value
-        const tasks = files.map<UploadTaskItem>((file) => {
+        const snapshotFiles = await Promise.all(files.map((file) => cloneUploadFileSnapshot(file)))
+        const tasks = snapshotFiles.map<UploadTaskItem>((file) => {
             const relativePath = normalizeTaskRelativePath(file)
             return {
                 id: toTaskId(),
@@ -267,8 +304,8 @@ export const useFileStore = defineStore('file', () => {
             if ((task.parentId ?? null) === (currentParentId.value ?? null)) {
                 await loadEntries(currentParentId.value)
             }
-        } catch (error: any) {
-            const message = String(error?.message || '')
+        } catch (error: unknown) {
+            const message = String((error as { message?: string } | undefined)?.message || '')
             if (message.includes('暂停')) {
                 task.status = 'paused'
                 return
@@ -278,7 +315,7 @@ export const useFileStore = defineStore('file', () => {
                 return
             }
             task.status = 'failed'
-            task.errorMessage = message || '上传失败'
+            task.errorMessage = resolveUploadErrorMessage(error)
         }
     }
 

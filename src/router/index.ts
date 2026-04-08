@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { startProgress, closeProgress } from '@/utils/nprogress'
 import { routes } from '@/router/routes'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import { useUserStore } from '@/stores/user'
 
 const router = createRouter({
@@ -10,9 +11,13 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from) => {
-    startProgress()
+    const disableProgress = to.matched.some((item) => item.meta?.disableProgress)
+    if (!disableProgress) {
+        startProgress()
+    }
     const authStore = useAuthStore()
     const userStore = useUserStore()
+    const settingsStore = useSettingsStore()
 
     if (to.path === '/login' && authStore.isLogin) {
         return '/home'
@@ -35,10 +40,16 @@ router.beforeEach(async (to, from) => {
     if (permissionCode && !authStore.hasPermission(permissionCode)) {
         return '/home'
     }
+
+    if (to.matched.some((item) => item.meta?.requiresStealthInspect) && !settingsStore.chatStealthInspectEnabled) {
+        return '/chat-center/messages'
+    }
 })
 
-router.afterEach(() => {
-    closeProgress()
+router.afterEach((to) => {
+    if (!to.matched.some((item) => item.meta?.disableProgress)) {
+        closeProgress()
+    }
 })
 
 export default router

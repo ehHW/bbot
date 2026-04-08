@@ -63,7 +63,7 @@ onMounted(loadData)
 
 <style scoped>
 .ant-card {
-    height: calc(100vh - 115px);
+    height: 100%;
 }
 
 :deep(.ant-card-body) {

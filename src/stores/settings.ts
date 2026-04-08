@@ -1,16 +1,23 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { getChatSettingsApi, updateChatSettingsApi } from '@/api/chat'
 
 export interface AppSettings {
     systemTitle: string
-    menuHoverExpandDelayMs: number
     themeMode: 'light' | 'dark'
+    chatReceiveNotification: boolean
+    chatListSortMode: 'recent' | 'unread'
+    chatStealthInspectEnabled: boolean
+    chatSendHotkey: 'enter' | 'ctrl_enter'
 }
 
 const defaultSettings: AppSettings = {
     systemTitle: 'Bbot 管理后台',
-    menuHoverExpandDelayMs: 300,
     themeMode: 'light',
+    chatReceiveNotification: true,
+    chatListSortMode: 'recent',
+    chatStealthInspectEnabled: false,
+    chatSendHotkey: 'ctrl_enter',
 }
 
 export const useSettingsStore = defineStore(
@@ -22,8 +29,11 @@ export const useSettingsStore = defineStore(
             settings.value = {
                 ...settings.value,
                 ...next,
-                menuHoverExpandDelayMs: normalizeDelay(next.menuHoverExpandDelayMs ?? settings.value.menuHoverExpandDelayMs),
                 themeMode: normalizeThemeMode(next.themeMode ?? settings.value.themeMode),
+                chatListSortMode: normalizeChatListSortMode(next.chatListSortMode ?? settings.value.chatListSortMode),
+                chatReceiveNotification: normalizeBoolean(next.chatReceiveNotification, settings.value.chatReceiveNotification),
+                chatStealthInspectEnabled: normalizeBoolean(next.chatStealthInspectEnabled, settings.value.chatStealthInspectEnabled),
+                chatSendHotkey: normalizeChatSendHotkey(next.chatSendHotkey ?? settings.value.chatSendHotkey),
             }
         }
 
@@ -32,16 +42,61 @@ export const useSettingsStore = defineStore(
         }
 
         const systemTitle = computed(() => settings.value.systemTitle)
-        const menuHoverExpandDelayMs = computed(() => settings.value.menuHoverExpandDelayMs)
         const themeMode = computed(() => settings.value.themeMode)
+        const chatReceiveNotification = computed(() => settings.value.chatReceiveNotification)
+        const chatListSortMode = computed(() => settings.value.chatListSortMode)
+        const chatStealthInspectEnabled = computed(() => settings.value.chatStealthInspectEnabled)
+        const chatSendHotkey = computed(() => settings.value.chatSendHotkey)
+
+        const loadChatPreferences = async () => {
+            const { data } = await getChatSettingsApi()
+            const settingsJson = (data.settings_json || {}) as Record<string, unknown>
+            save({
+                themeMode: data.theme_mode,
+                chatReceiveNotification: data.chat_receive_notification,
+                chatListSortMode: data.chat_list_sort_mode,
+                chatStealthInspectEnabled: data.chat_stealth_inspect_enabled,
+                chatSendHotkey: normalizeChatSendHotkey(typeof settingsJson.chat_send_hotkey === 'string' ? settingsJson.chat_send_hotkey : undefined),
+            })
+            return data
+        }
+
+        const saveChatPreferences = async (next?: Partial<AppSettings>) => {
+            if (next) {
+                save(next)
+            }
+            const { data } = await updateChatSettingsApi({
+                theme_mode: settings.value.themeMode,
+                chat_receive_notification: settings.value.chatReceiveNotification,
+                chat_list_sort_mode: settings.value.chatListSortMode,
+                chat_stealth_inspect_enabled: settings.value.chatStealthInspectEnabled,
+                settings_json: {
+                    chat_send_hotkey: settings.value.chatSendHotkey,
+                },
+            })
+            const settingsJson = (data.settings_json || {}) as Record<string, unknown>
+            save({
+                themeMode: data.theme_mode,
+                chatReceiveNotification: data.chat_receive_notification,
+                chatListSortMode: data.chat_list_sort_mode,
+                chatStealthInspectEnabled: data.chat_stealth_inspect_enabled,
+                chatSendHotkey: normalizeChatSendHotkey(typeof settingsJson.chat_send_hotkey === 'string' ? settingsJson.chat_send_hotkey : undefined),
+            })
+            return data
+        }
 
         return {
             settings,
             systemTitle,
-            menuHoverExpandDelayMs,
             themeMode,
+            chatReceiveNotification,
+            chatListSortMode,
+            chatStealthInspectEnabled,
+            chatSendHotkey,
             save,
             reset,
+            loadChatPreferences,
+            saveChatPreferences,
         }
     },
     {
@@ -49,13 +104,18 @@ export const useSettingsStore = defineStore(
     },
 )
 
-function normalizeDelay(value: number | undefined): number {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-        return defaultSettings.menuHoverExpandDelayMs
-    }
-    return Math.min(2000, Math.max(100, Math.round(value)))
-}
-
 function normalizeThemeMode(value: AppSettings['themeMode'] | undefined): AppSettings['themeMode'] {
     return value === 'dark' ? 'dark' : 'light'
+}
+
+function normalizeChatListSortMode(value: AppSettings['chatListSortMode'] | undefined): AppSettings['chatListSortMode'] {
+    return value === 'unread' ? 'unread' : 'recent'
+}
+
+function normalizeBoolean(value: boolean | undefined, fallback: boolean): boolean {
+    return typeof value === 'boolean' ? value : fallback
+}
+
+function normalizeChatSendHotkey(value: string | undefined): AppSettings['chatSendHotkey'] {
+    return value === 'enter' ? 'enter' : 'ctrl_enter'
 }

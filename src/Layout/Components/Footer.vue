@@ -6,7 +6,7 @@
 
 <style scoped>
 .footer {
-    height: 30px;
+    height: var(--app-footer-height);
     display: flex;
     justify-content: center;
     align-items: center;

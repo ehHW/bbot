@@ -2,7 +2,8 @@
     <a-modal
         :open="open"
         title="裁剪头像"
-        width="900px"
+        width="675px"
+        :body-style="modalBodyStyle"
         :confirm-loading="confirmLoading"
         ok-text="确认上传"
         cancel-text="取消"
@@ -77,6 +78,11 @@ const previewHtml = ref('')
 const previewDiameter = 180
 const baseScale = ref<number | null>(null)
 const maxZoomRatio = 3
+const modalBodyStyle = {
+    minHeight: '60vh',
+    maxHeight: '78vh',
+    overflowY: 'auto' as const,
+}
 const option = reactive({
     img: '',
     size: 1,
@@ -198,7 +204,7 @@ const handleConfirm = async () => {
 
 <style scoped>
 .cropper-layout {
-    min-height: 460px;
+    min-height: 620px;
     width: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 240px;
@@ -207,7 +213,7 @@ const handleConfirm = async () => {
 
 .cropper-stage {
     min-width: 0;
-    height: 460px;
+    height: 620px;
     padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: 18px;

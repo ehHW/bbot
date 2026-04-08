@@ -1,80 +1,87 @@
 <template>
-    <a-card class="file-manage-page" title="文件管理">
-        <a-space style="margin-bottom: 12px; width: 100%; justify-content: space-between" wrap>
-            <a-breadcrumb>
-                <a-breadcrumb-item v-for="item in fileStore.breadcrumbs" :key="String(item.id ?? 'root')">
-                    <a @click="goToBreadcrumb(item.id)">{{ item.name }}</a>
-                </a-breadcrumb-item>
-            </a-breadcrumb>
+    <a-card class="file-manage-page">
+        <a-tabs v-model:activeKey="activeTab" class="file-upload-tabs" @change="handleTabChange">
+            <a-tab-pane key="manage" tab="文件管理">
+                <a-space style="margin-bottom: 12px; width: 100%; justify-content: space-between" wrap>
+                    <a-breadcrumb>
+                        <a-breadcrumb-item v-for="item in fileStore.breadcrumbs" :key="String(item.id ?? 'root')">
+                            <a @click="goToBreadcrumb(item.id)">{{ item.name }}</a>
+                        </a-breadcrumb-item>
+                    </a-breadcrumb>
 
-            <a-space>
-                <template v-if="isRecycleBinView">
-                    <a-button @click="restoreSelected" :disabled="selectedRecycleIds.length === 0">批量还原</a-button>
-                    <a-button danger @click="clearSelected" :disabled="selectedRecycleIds.length === 0">批量彻底删除</a-button>
-                    <a-button danger @click="clearAllRecycleBin">清空回收站</a-button>
-                </template>
-                <a-button v-else type="primary" @click="openCreateFolder">新建文件夹</a-button>
-                <a-button @click="refresh">刷新</a-button>
-            </a-space>
-        </a-space>
-
-        <!-- 搜索框 -->
-        <a-space style="margin-bottom: 12px; width: 100%" wrap>
-            <a-auto-complete
-                v-model:value="searchKeyword"
-                placeholder="搜索文件名..."
-                :options="searchOptions"
-                :loading="searchLoading"
-                style="width: 300px"
-                @input="onSearchInput"
-                @select="onSearchSelect"
-            />
-            <a-button type="primary" @click="doFullSearch" :loading="searchLoading">搜索全部</a-button>
-            <a-button @click="resetSearch" :loading="searchLoading">重置</a-button>
-        </a-space>
-
-        <a-table
-            :columns="columns"
-            :data-source="tableData"
-            row-key="id"
-            :loading="fileStore.loadingEntries || searchLoading"
-            :pagination="{ pageSize: 12 }"
-            :row-selection="rowSelection"
-        >
-            <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                    <FileNameCell :name="record.display_name" :is-dir="record.is_dir" :clickable="record.is_dir" @click="enterFolder(record)" />
-                </template>
-                <template v-else-if="column.key === 'path'">
-                    <span class="search-path">{{ formatPath(record) }}</span>
-                </template>
-                <template v-else-if="column.key === 'size'">
-                    <span>{{ record.is_dir ? '-' : formatFileSize(record.file_size) }}</span>
-                </template>
-                <template v-else-if="column.key === 'type'">
-                    <a-tag :color="record.is_recycle_bin ? 'orange' : record.is_dir ? 'blue' : 'green'">
-                        {{ record.is_recycle_bin ? '回收站' : record.is_dir ? '文件夹' : '文件' }}
-                    </a-tag>
-                </template>
-                <template v-else-if="column.key === 'updated_at'">
-                    <span>{{ formatDateTime(record.updated_at) }}</span>
-                </template>
-                <template v-else-if="column.key === 'actions'">
                     <a-space>
-                        <a v-if="isRecycleBinView" @click="restoreItem(record.id)">还原</a>
-                        <a v-else-if="!record.is_system" @click="openRename(record)">编辑</a>
-                        <a v-if="!record.is_dir && record.url" :href="record.url" target="_blank" rel="noopener noreferrer">查看</a>
-                        <a-popconfirm
-                            v-if="isRecycleBinView || !record.is_system"
-                            :title="isRecycleBinView ? '确认彻底删除？' : '确认删除？'"
-                            @confirm="onDelete(record.id)"
-                        >
-                            <a style="color: #ff4d4f">删除</a>
-                        </a-popconfirm>
+                        <template v-if="isRecycleBinView">
+                            <a-button @click="restoreSelected" :disabled="selectedRecycleIds.length === 0">批量还原</a-button>
+                            <a-button danger @click="clearSelected" :disabled="selectedRecycleIds.length === 0">批量彻底删除</a-button>
+                            <a-button danger @click="clearAllRecycleBin">清空回收站</a-button>
+                        </template>
+                        <a-button v-else type="primary" @click="openCreateFolder">新建文件夹</a-button>
+                        <a-button @click="refresh">刷新</a-button>
                     </a-space>
-                </template>
-            </template>
-        </a-table>
+                </a-space>
+
+                <a-space style="margin-bottom: 12px; width: 100%" wrap>
+                    <a-auto-complete
+                        v-model:value="searchKeyword"
+                        placeholder="搜索文件名..."
+                        :options="searchOptions"
+                        :loading="searchLoading"
+                        style="width: 300px"
+                        @input="onSearchInput"
+                        @select="onSearchSelect"
+                    />
+                    <a-button type="primary" @click="doFullSearch" :loading="searchLoading">搜索全部</a-button>
+                    <a-button @click="resetSearch" :loading="searchLoading">重置</a-button>
+                </a-space>
+
+                <a-table
+                    :columns="columns"
+                    :data-source="tableData"
+                    row-key="id"
+                    :loading="fileStore.loadingEntries || searchLoading"
+                    :pagination="{ pageSize: 12 }"
+                    :row-selection="rowSelection"
+                >
+                    <template #bodyCell="{ column, record }">
+                        <template v-if="column.key === 'name'">
+                            <FileNameCell :name="record.display_name" :is-dir="record.is_dir" :clickable="record.is_dir" @click="enterFolder(record)" />
+                        </template>
+                        <template v-else-if="column.key === 'path'">
+                            <span class="search-path">{{ formatPath(record) }}</span>
+                        </template>
+                        <template v-else-if="column.key === 'size'">
+                            <span>{{ record.is_dir ? '-' : formatFileSize(record.file_size) }}</span>
+                        </template>
+                        <template v-else-if="column.key === 'type'">
+                            <a-tag :color="record.is_recycle_bin ? 'orange' : record.is_dir ? 'blue' : 'green'">
+                                {{ record.is_recycle_bin ? '回收站' : record.is_dir ? '文件夹' : '文件' }}
+                            </a-tag>
+                        </template>
+                        <template v-else-if="column.key === 'updated_at'">
+                            <span>{{ formatDateTime(record.updated_at) }}</span>
+                        </template>
+                        <template v-else-if="column.key === 'actions'">
+                            <a-space>
+                                <a v-if="isRecycleBinView" @click="restoreItem(record.id)">还原</a>
+                                <a v-else-if="!record.is_system" @click="openRename(record)">编辑</a>
+                                <a v-if="!record.is_dir && record.url" :href="record.url" target="_blank" rel="noopener noreferrer">查看</a>
+                                <a-popconfirm
+                                    v-if="isRecycleBinView || !record.is_system"
+                                    :title="isRecycleBinView ? '确认彻底删除？' : '确认删除？'"
+                                    @confirm="onDelete(record.id)"
+                                >
+                                    <a style="color: #ff4d4f">删除</a>
+                                </a-popconfirm>
+                            </a-space>
+                        </template>
+                    </template>
+                </a-table>
+            </a-tab-pane>
+
+            <a-tab-pane key="upload" tab="文件上传" force-render>
+                <UploadTaskPanel />
+            </a-tab-pane>
+        </a-tabs>
     </a-card>
 
     <a-modal v-model:open="createFolderOpen" title="新建文件夹" ok-text="创建" cancel-text="取消" @ok="submitCreateFolder">
@@ -87,10 +94,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
 import { message } from 'ant-design-vue'
 import FileNameCell from '@/components/common/FileNameCell.vue'
+import UploadTaskPanel from '@/views/FileManage/components/UploadTaskPanel.vue'
 import { useFileStore } from '@/stores/file'
 import { getErrorMessage } from '@/utils/error'
 import { formatFileSize } from '@/utils/fileFormatter'
@@ -99,14 +108,16 @@ import { trimText } from '@/validators/common'
 import { searchFileEntriesApi } from '@/api/upload'
 
 const fileStore = useFileStore()
+const route = useRoute()
+const router = useRouter()
 const createFolderOpen = ref(false)
 const newFolderName = ref('')
 const renameOpen = ref(false)
 const renameName = ref('')
 const renameId = ref<number | null>(null)
 const selectedRecycleIds = ref<number[]>([])
+const activeTab = ref<'manage' | 'upload'>(route.query.tab === 'upload' ? 'upload' : 'manage')
 
-// 搜索相关
 const searchKeyword = ref('')
 const suggestResults = ref<SearchFileEntryItem[]>([])
 const searchResults = ref<SearchFileEntryItem[]>([])
@@ -141,10 +152,7 @@ const columns = computed(() => {
     ]
 })
 
-const tableData = computed<Array<FileEntryItem | SearchFileEntryItem>>(() => {
-    return isSearchMode.value ? searchResults.value : fileStore.entries
-})
-
+const tableData = computed<Array<FileEntryItem | SearchFileEntryItem>>(() => (isSearchMode.value ? searchResults.value : fileStore.entries))
 const isRecycleBinView = computed(() => !isSearchMode.value && Boolean(fileStore.currentParent?.is_recycle_bin))
 
 const rowSelection = computed(() => {
@@ -167,24 +175,20 @@ const clearSearchState = () => {
     selectedRecycleIds.value = []
 }
 
-// 计算搜索建议选项
 const searchOptions = computed(() => {
     if (!getNormalizedKeyword()) {
         return []
     }
 
-    const similar = suggestResults.value
-        .slice(0, 5)
-        .map(item => ({
-            label: `${item.display_name} (${item.directory_path || '根目录'})`,
-            value: item.display_name,
-            fileId: item.id,
-        }))
+    const similar = suggestResults.value.slice(0, 5).map((item) => ({
+        label: `${item.display_name} (${item.directory_path || '根目录'})`,
+        value: item.display_name,
+        fileId: item.id,
+    }))
 
     return [{ label: '搜索选项', options: similar }]
 })
 
-// 执行搜索（下拉框中的搜索）
 const performSearch = async () => {
     const keyword = getNormalizedKeyword()
     if (!keyword) {
@@ -201,35 +205,29 @@ const performSearch = async () => {
     }
 }
 
-// 处理搜索框输入更新（防抖搜索，用户停止输入500ms后执行）
 const onSearchInput = () => {
-    // 清除之前的定时器
     if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer)
     }
-    
-    // 如果输入为空，清空结果
+
     if (!getNormalizedKeyword()) {
         suggestResults.value = []
         return
     }
-    
-    // 设置新的定时器，500ms后执行搜索
+
     searchDebounceTimer = setTimeout(async () => {
         await performSearch()
     }, 500)
 }
 
-// 点击搜索建议项
 const onSearchSelect = async (value: string, option: { fileId?: number }) => {
     searchKeyword.value = value
-    const item = suggestResults.value.find(r => r.id === option?.fileId) || suggestResults.value.find(r => r.display_name === value)
+    const item = suggestResults.value.find((entry) => entry.id === option?.fileId) || suggestResults.value.find((entry) => entry.display_name === value)
     if (item) {
         await navigateToFile(item)
     }
 }
 
-// 执行全部搜索
 const doFullSearch = async () => {
     const keyword = getNormalizedKeyword()
     if (!keyword) {
@@ -258,7 +256,6 @@ const resetSearch = async () => {
     await fileStore.loadEntries(null)
 }
 
-// 导航到搜索结果的文件所在目录
 const navigateToFile = async (item: SearchFileEntryItem) => {
     if (item.is_dir) {
         await fileStore.enterFolder(item)
@@ -268,10 +265,7 @@ const navigateToFile = async (item: SearchFileEntryItem) => {
     clearSearchState()
 }
 
-// 格式化搜索结果中的路径
-const formatPath = (item: SearchFileEntryItem) => {
-    return item.full_path
-}
+const formatPath = (item: SearchFileEntryItem) => item.full_path
 
 const refresh = async () => {
     if (isSearchMode.value) {
@@ -345,7 +339,6 @@ const restoreSelected = async () => {
     }
     try {
         for (const id of selectedRecycleIds.value.slice()) {
-            // eslint-disable-next-line no-await-in-loop
             await fileStore.restoreRecycleEntry(id)
         }
         selectedRecycleIds.value = []
@@ -397,12 +390,31 @@ const submitRename = async () => {
     }
 }
 
+const handleTabChange = async (key: string) => {
+    const nextTab = key === 'upload' ? 'upload' : 'manage'
+    activeTab.value = nextTab
+    const nextQuery = { ...route.query }
+    if (nextTab === 'upload') {
+        nextQuery.tab = 'upload'
+    } else {
+        delete nextQuery.tab
+    }
+    await router.replace({ path: '/file-manage', query: nextQuery })
+}
+
+watch(
+    () => route.query.tab,
+    (tab) => {
+        activeTab.value = tab === 'upload' ? 'upload' : 'manage'
+    },
+    { immediate: true },
+)
+
 onMounted(async () => {
     await fileStore.loadEntries(null)
 })
 
 onBeforeUnmount(() => {
-    // 清除搜索防抖定时器
     if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer)
     }
@@ -411,16 +423,20 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .file-manage-page {
-    height: calc(100vh - 115px);
+    height: 100%;
 }
 
 :deep(.ant-card-body) {
-    height: calc(100% - 57px);
+    height: 100%;
     overflow: auto;
 }
 
+.file-upload-tabs {
+    min-height: 100%;
+}
+
 .search-path {
-    color: var(--text-color-secondary);
+    color: var(--text-secondary);
     font-size: 12px;
 }
 </style>

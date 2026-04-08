@@ -5,6 +5,9 @@
 }
 
 :root {
+    --app-header-height: 50px;
+    --app-footer-height: 30px;
+    --app-main-height: calc(100vh - var(--app-header-height) - var(--app-footer-height));
     --surface-page: #f3f5f9;
     --surface-header: #ffffff;
     --surface-sidebar: #ffffff;

@@ -2,11 +2,8 @@
     <a-layout-sider
         v-model:collapsed="collapsed"
         collapsible
-        :trigger="null"
         collapsed-width="50px"
         :style="siderStyle"
-        @mouseenter="handleMouseEnter"
-        @mouseleave="handleMouseLeave"
     >
         <div class="logo">
             <img src="@/assets/img/miao.png" alt="" />
@@ -76,7 +73,7 @@ import {
     UploadOutlined,
     UserOutlined,
 } from '@ant-design/icons-vue'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { routes } from '@/router/routes'
@@ -85,6 +82,7 @@ import { useSettingsStore } from '@/stores/settings'
 
 interface MenuMeta {
     menu?: boolean
+    menuGroup?: boolean
     menuTitle?: string
     menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'file' | 'upload' | 'user' | 'team' | 'safety' | 'chat' | 'appstore' | 'trophy' | 'music'
     permissionCode?: string
@@ -111,7 +109,6 @@ const collapsed = ref<boolean>(true)
 const selectedKeys = ref<string[]>([])
 const openKeys = ref<string[]>([])
 const activeAncestorKeys = ref<string[]>([])
-let expandTimer: ReturnType<typeof setTimeout> | null = null
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
@@ -146,6 +143,9 @@ const menuItems = computed(() => {
             const meta = (route.meta || {}) as MenuMeta
             const fullPath = resolveFullPath(route.path, parentPath)
             const descendants = route.children?.length ? collectChildren(route.children, fullPath) : []
+            if (meta.menuGroup && descendants.length === 0) {
+                continue
+            }
             if (meta.menu) {
                 if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) continue
                 result.push({
@@ -172,6 +172,7 @@ const menuItems = computed(() => {
         if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) continue
 
         const subItems = route.children?.length ? collectChildren(route.children, fullPath) : []
+        if (meta.menuGroup && subItems.length === 0) continue
         result.push({
             key: fullPath,
             title: meta.menuTitle || fullPath,
@@ -224,32 +225,6 @@ watch(
 const handleMenuClick = ({ key }: { key: string }) => {
     router.push(key)
 }
-
-const handleMouseEnter = () => {
-    if (expandTimer) {
-        clearTimeout(expandTimer)
-    }
-    expandTimer = setTimeout(() => {
-        collapsed.value = false
-        expandTimer = null
-    }, settingsStore.menuHoverExpandDelayMs)
-}
-
-const handleMouseLeave = () => {
-    if (expandTimer) {
-        clearTimeout(expandTimer)
-        expandTimer = null
-    }
-    collapsed.value = true
-    openKeys.value = []
-}
-
-onBeforeUnmount(() => {
-    if (expandTimer) {
-        clearTimeout(expandTimer)
-        expandTimer = null
-    }
-})
 </script>
 
 <style scoped>
@@ -272,5 +247,17 @@ onBeforeUnmount(() => {
 :deep(.ant-menu-item) {
     margin-inline: 4px;
     margin-block: 5px;
+}
+
+:deep(.ant-layout-sider-trigger) {
+    background: color-mix(in srgb, var(--surface-sidebar) 92%, transparent);
+    color: var(--text-secondary);
+    border-top: 1px solid color-mix(in srgb, var(--text-secondary) 16%, transparent);
+    transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+:deep(.ant-layout-sider-trigger:hover) {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--surface-sidebar) 78%, var(--surface-header) 22%);
 }
 </style>

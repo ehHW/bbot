@@ -57,6 +57,7 @@ const title = computed(() => settingsStore.systemTitle)
 
 interface NavMeta {
     menu?: boolean
+    menuGroup?: boolean
     menuTitle?: string
     menuOrder?: number
     permissionCode?: string
@@ -72,11 +73,18 @@ function collectNavItems(routeList: RouteRecordRaw[], parentPath = ''): Array<{ 
                 ? `${parentPath}/${route.path}`.replace(/\/+/g, '/')
                 : route.path
         const meta = (route.meta || {}) as NavMeta
+        const descendants = route.children?.length ? collectNavItems(route.children, fullPath) : []
+        if (meta.menuGroup && descendants.length === 0) {
+            continue
+        }
+        if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) {
+            continue
+        }
         if (meta.menu) {
             result.push({ path: fullPath, title: meta.menuTitle || route.path })
         }
-        if (route.children?.length) {
-            result.push(...collectNavItems(route.children, fullPath))
+        if (descendants.length) {
+            result.push(...descendants)
         }
     }
     return result
@@ -126,8 +134,8 @@ const onMenuClick = ({ key }: { key: string }) => {
 .header {
     background: var(--surface-header);
     padding: 0 12px;
-    height: 50px;
-    line-height: 50px;
+    height: var(--app-header-height);
+    line-height: var(--app-header-height);
     display: flex;
     justify-content: space-between;
     align-items: center;

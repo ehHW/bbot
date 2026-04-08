@@ -1,5 +1,5 @@
 <template>
-    <a-card class="profile-page" title="个人中心">
+    <a-card class="profile-page">
         <a-row :gutter="24">
             <a-col :xs="24" :lg="16">
                 <a-form layout="vertical">
@@ -200,11 +200,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .profile-page {
-    height: calc(100vh - 115px);
+    height: 100%;
 }
 
 :deep(.ant-card-body) {
-    height: calc(100% - 57px);
+    height: 100%;
     overflow: auto;
 }
 
