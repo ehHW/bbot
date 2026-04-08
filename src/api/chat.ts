@@ -6,6 +6,8 @@ import type {
     ChatConversationMemberItem,
     ChatFriendRequestItem,
     ChatFriendshipItem,
+    ChatGroupInvitationPayload,
+    ChatMessageItem,
     ChatGroupJoinRequestItem,
     ChatMessageListResult,
     ChatPreferencePayload,
@@ -26,6 +28,25 @@ export const getConversationMessagesApi = (
     params?: { before_sequence?: number; after_sequence?: number; around_sequence?: number; limit?: number },
 ) => {
     return instance.get<ChatMessageListResult>(`chat/conversations/${conversationId}/messages/`, { params })
+}
+
+export const sendConversationAttachmentApi = (conversationId: number, asset_reference_id: number) => {
+    return instance.post<{
+        detail: string
+        conversation_id: number
+        message: ChatMessageItem
+        conversation: ChatConversationItem
+        asset_reference: {
+            id: number
+            asset_id: number | null
+            ref_domain: string
+            ref_type: string
+        }
+    }>(`chat/conversations/${conversationId}/attachments/`, { asset_reference_id })
+}
+
+export const forwardMessagesApi = (payload: { target_conversation_id: number; message_ids: number[] }) => {
+    return instance.post<{ detail: string; target_conversation_id: number; forwarded_count: number }>('chat/messages/forward/', payload)
 }
 
 export const updateGroupConfigApi = (
@@ -84,7 +105,21 @@ export const getConversationMembersApi = (conversationId: number) => {
 }
 
 export const inviteConversationMemberApi = (conversationId: number, target_user_id: number) => {
-    return instance.post<{ detail: string; mode: string }>(`chat/conversations/${conversationId}/members/invite/`, { target_user_id })
+    return instance.post<{ detail: string; mode: 'message_sent'; direct_conversation: { id: number; type: 'direct' | 'group' }; message: ChatMessageItem }>(
+        `chat/conversations/${conversationId}/members/invite/`,
+        { target_user_id },
+    )
+}
+
+export const applyGroupInvitationApi = (payload: { conversation_id: number; inviter_user_id: number }) => {
+    return instance.post<{
+        detail: string
+        mode: 'pending_approval' | 'joined'
+        conversation?: ChatConversationItem
+        join_request?: { id: number; status: string }
+        member?: { user_id: number; status: string }
+        invitation?: ChatGroupInvitationPayload
+    }>('chat/group-invitations/apply/', payload)
 }
 
 export const removeConversationMemberApi = (conversationId: number, userId: number) => {

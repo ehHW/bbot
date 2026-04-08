@@ -15,7 +15,7 @@
                             <a-button danger @click="clearSelected" :disabled="selectedRecycleIds.length === 0">批量彻底删除</a-button>
                             <a-button danger @click="clearAllRecycleBin">清空回收站</a-button>
                         </template>
-                        <a-button v-else type="primary" @click="openCreateFolder">新建文件夹</a-button>
+                        <a-button type="primary" @click="openCreateFolder">新建文件夹</a-button>
                         <a-button @click="refresh">刷新</a-button>
                     </a-space>
                 </a-space>

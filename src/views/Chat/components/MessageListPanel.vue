@@ -46,11 +46,9 @@
                 @click="openConversation(conversation.id)"
                 @contextmenu.prevent="openConversationMenu($event, conversation)"
             >
-                <a-badge :count="conversation.unread_count" :overflow-count="99" :offset="[-2, 24]" :number-style="badgeStyle">
-                    <a-avatar :src="conversation.avatar || undefined" :style="avatarStyle(conversation.type)">
-                        {{ avatarText(conversationDisplayName(conversation)) }}
-                    </a-avatar>
-                </a-badge>
+                <a-avatar :src="conversation.avatar || undefined" :style="avatarStyle(conversation.type)">
+                    {{ avatarText(conversationDisplayName(conversation)) }}
+                </a-avatar>
                 <div class="conversation-item__body">
                     <div class="conversation-item__top">
                         <span class="conversation-item__name">{{ conversationDisplayName(conversation) }}</span>
@@ -58,8 +56,7 @@
                     </div>
                     <div class="conversation-item__bottom">
                         <span class="conversation-item__preview">{{ conversation.last_message_preview || '暂无消息' }}</span>
-                        <a-tag v-if="conversation.type === 'group'" color="gold">群</a-tag>
-                        <a-tag v-else color="blue">私</a-tag>
+                        <a-badge v-if="conversation.unread_count > 0" :count="conversation.unread_count" :overflow-count="99" :number-style="badgeStyle" />
                     </div>
                 </div>
             </button>
@@ -73,7 +70,7 @@
             </div>
         </transition>
 
-        <a-modal v-model:open="allResultModalOpen" title="搜索结果" :footer="null" width="570" :body-style="tallModalBodyStyle">
+        <a-modal v-model:open="allResultModalOpen" title="搜索结果" :footer="null" :width="CHAT_MODAL_WIDTH_MD" :body-style="tallModalBodyStyle">
             <a-tabs v-model:activeKey="activeResultTab">
                 <a-tab-pane key="conversations" tab="会话">
                     <div class="drawer-list">
@@ -135,7 +132,7 @@
             </a-tabs>
         </a-modal>
 
-        <a-modal v-model:open="discoverModalOpen" title="加好友/群" :footer="null" width="540" :body-style="tallModalBodyStyle">
+        <a-modal v-model:open="discoverModalOpen" title="加好友/群" :footer="null" :width="CHAT_MODAL_WIDTH_MD" :body-style="tallModalBodyStyle">
             <a-input v-model:value="discoverKeyword" allow-clear placeholder="搜索用户名、昵称或群聊名称" />
             <a-tabs v-model:activeKey="discoverTab" class="discover-tabs">
                 <a-tab-pane key="users" tab="匹配的用户">
@@ -168,10 +165,10 @@
             </a-tabs>
         </a-modal>
 
-        <a-modal v-model:open="groupModalOpen" title="创建群聊" @ok="handleCreateGroup" :confirm-loading="groupSaving" width="420" :body-style="tallModalBodyStyle">
+        <a-modal v-model:open="groupModalOpen" title="创建群聊" @ok="handleCreateGroup" :confirm-loading="groupSaving" :width="CHAT_MODAL_WIDTH_SM" :body-style="tallModalBodyStyle">
             <a-form layout="vertical" :model="groupForm">
                 <a-form-item label="群名称">
-                    <a-input v-model:value="groupForm.name" maxlength="50" />
+                    <a-input v-model:value="groupForm.name" :maxlength="50" />
                 </a-form-item>
                 <a-form-item label="初始成员">
                     <a-select v-model:value="groupForm.member_user_ids" mode="multiple" :options="friendOptions" placeholder="选择好友加入群聊" />
@@ -221,6 +218,8 @@ const contextConversation = ref<ChatConversationItem | null>(null)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const discoverModalOpen = ref(false)
 const discoverKeyword = ref('')
+const CHAT_MODAL_WIDTH_SM = 427
+const CHAT_MODAL_WIDTH_MD = 480
 const discoverTab = ref('users')
 const discoverTimer = ref<number | null>(null)
 const discoverResult = ref<ChatSearchResult | null>(null)
@@ -488,8 +487,8 @@ onBeforeUnmount(() => {
     padding: 14px;
     background: var(--chat-panel-bg);
     border: 1px solid var(--chat-panel-border);
-    border-radius: 14px;
-    box-shadow: var(--chat-panel-shadow);
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .toolbar-row,

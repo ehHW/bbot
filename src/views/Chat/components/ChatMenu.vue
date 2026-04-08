@@ -68,11 +68,11 @@ const isActive = (name: string) => {
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    width: 60px;
+    width: 100%;
     padding: 10px 6px;
     background: var(--chat-panel-bg);
     border: 1px solid var(--chat-panel-border);
-    border-radius: 14px;
+    border-radius: 14px 0 0 14px;
     color: var(--chat-text-secondary);
     box-shadow: var(--chat-panel-shadow);
 }

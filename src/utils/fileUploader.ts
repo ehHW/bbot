@@ -26,6 +26,7 @@ export interface UploadFileResult {
     relativePath: string
     url: string
     file?: FileEntryItem
+    assetReferenceId?: number | null
 }
 
 const subscribeMergeProgress = (taskId: string, token: string, onProgress?: (progress: number) => void, onLog?: (message: string) => void): Promise<UploadFileResult> => {
@@ -50,6 +51,8 @@ const subscribeMergeProgress = (taskId: string, token: string, onProgress?: (pro
                     mode: 'chunked',
                     relativePath: String(payload.relative_path || ''),
                     url: String(payload.url || ''),
+                    file: payload.file as FileEntryItem | undefined,
+                    assetReferenceId: typeof payload.asset_reference_id === 'number' ? payload.asset_reference_id : null,
                 })
             }
             if (payload.status === 'failed') {
@@ -113,6 +116,7 @@ export const uploadFileWithCategory = async ({
             relativePath: data.file.relative_path,
             url: data.file.url,
             file: data.file,
+            assetReferenceId: data.file.asset_reference_id ?? null,
         }
     }
 
@@ -141,6 +145,7 @@ export const uploadFileWithCategory = async ({
             relativePath: precheckRes.data.file?.relative_path || '',
             url: precheckRes.data.file?.url || '',
             file: precheckRes.data.file,
+            assetReferenceId: precheckRes.data.file?.asset_reference_id ?? null,
         }
     }
 

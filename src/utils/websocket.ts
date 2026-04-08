@@ -4,6 +4,9 @@ type SocketStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed'
 
 export interface WebSocketMessage {
     type: string
+    event_type?: string
+    domain?: string
+    occurred_at?: string
     message?: string
     timestamp?: number
     [key: string]: unknown
@@ -21,9 +24,9 @@ class GlobalWebSocketManager {
     private socket: WebSocket | null = null
     private token = ''
     private listeners = new Set<MessageListener>()
-    private heartbeatTimer: ReturnType<typeof window.setInterval> | null = null
-    private heartbeatTimeoutTimer: ReturnType<typeof window.setTimeout> | null = null
-    private reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
+    private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+    private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null
     private reconnectAttempts = 0
     private manualClose = false
     private uploadTaskSubscriptions = new Set<string>()
@@ -204,7 +207,7 @@ class GlobalWebSocketManager {
         )
 
         this.pushLog(`准备重连，${delay}ms 后重试`)
-        this.reconnectTimer = window.setTimeout(() => {
+        this.reconnectTimer = setTimeout(() => {
             this.openSocket()
         }, delay)
     }
@@ -212,7 +215,7 @@ class GlobalWebSocketManager {
     private startHeartbeat() {
         this.stopHeartbeat()
         this.sendHeartbeat()
-        this.heartbeatTimer = window.setInterval(() => {
+        this.heartbeatTimer = setInterval(() => {
             this.sendHeartbeat()
         }, HEARTBEAT_INTERVAL_MS)
     }
@@ -229,7 +232,7 @@ class GlobalWebSocketManager {
             }),
         )
         this.clearHeartbeatTimeout()
-        this.heartbeatTimeoutTimer = window.setTimeout(() => {
+        this.heartbeatTimeoutTimer = setTimeout(() => {
             this.pushLog('心跳超时，主动断开并重连')
             this.socket?.close()
         }, HEARTBEAT_TIMEOUT_MS)
@@ -251,7 +254,7 @@ class GlobalWebSocketManager {
 
     private stopHeartbeat() {
         if (this.heartbeatTimer) {
-            window.clearInterval(this.heartbeatTimer)
+            clearInterval(this.heartbeatTimer)
             this.heartbeatTimer = null
         }
         this.clearHeartbeatTimeout()
@@ -259,14 +262,14 @@ class GlobalWebSocketManager {
 
     private clearHeartbeatTimeout() {
         if (this.heartbeatTimeoutTimer) {
-            window.clearTimeout(this.heartbeatTimeoutTimer)
+            clearTimeout(this.heartbeatTimeoutTimer)
             this.heartbeatTimeoutTimer = null
         }
     }
 
     private clearReconnectTimer() {
         if (this.reconnectTimer) {
-            window.clearTimeout(this.reconnectTimer)
+            clearTimeout(this.reconnectTimer)
             this.reconnectTimer = null
         }
     }
@@ -286,9 +289,37 @@ class GlobalWebSocketManager {
         this.socket = null
     }
 
+    private normalizeEventMessage(payload: WebSocketMessage): WebSocketMessage {
+        if (payload.type !== 'event' || typeof payload.event_type !== 'string') {
+            return payload
+        }
+
+        const eventPayload = typeof payload.payload === 'object' && payload.payload ? (payload.payload as Record<string, unknown>) : {}
+        const eventTypeMap: Record<string, string> = {
+            'system.force_logout': 'force_logout',
+            'chat.message.ack': 'chat_message_ack',
+            'chat.message.created': 'chat_new_message',
+            'chat.conversation.updated': 'chat_conversation_updated',
+            'chat.unread.updated': 'chat_unread_updated',
+            'chat.friend_request.updated': 'chat_friend_request_updated',
+            'chat.friendship.updated': 'chat_friendship_updated',
+            'chat.group_join_request.updated': 'chat_group_join_request_updated',
+            'chat.typing.updated': 'chat_typing',
+            'chat.system_notice.created': 'system_notice',
+        }
+
+        return {
+            ...eventPayload,
+            type: eventTypeMap[payload.event_type] || payload.event_type,
+            event_type: payload.event_type,
+            domain: typeof payload.domain === 'string' ? payload.domain : undefined,
+            occurred_at: typeof payload.occurred_at === 'string' ? payload.occurred_at : undefined,
+        }
+    }
+
     private parseMessage(raw: string): WebSocketMessage {
         try {
-            return JSON.parse(raw) as WebSocketMessage
+            return this.normalizeEventMessage(JSON.parse(raw) as WebSocketMessage)
         } catch {
             return { type: 'text', message: raw }
         }

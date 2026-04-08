@@ -72,7 +72,7 @@
             </a-tab-pane>
         </a-tabs>
 
-        <a-modal v-model:open="addFriendModalOpen" title="添加好友" :footer="null" width="420" :body-style="tallModalBodyStyle">
+        <a-modal v-model:open="addFriendModalOpen" title="添加好友" :footer="null" :width="CHAT_MODAL_WIDTH_SM" :body-style="tallModalBodyStyle">
             <div class="drawer-toolbar">
                 <a-input v-model:value="discoverKeyword" allow-clear placeholder="输入用户名或昵称搜索" />
             </div>
@@ -110,6 +110,7 @@ const addFriendModalOpen = ref(false)
 const discoverKeyword = ref('')
 const friendRequestMessage = ref('')
 const searchTimer = ref<number | null>(null)
+const CHAT_MODAL_WIDTH_SM = 427
 const tallModalBodyStyle = {
     minHeight: '54vh',
     maxHeight: '72vh',

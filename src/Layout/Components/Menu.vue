@@ -72,6 +72,7 @@ import {
     TrophyOutlined,
     UploadOutlined,
     UserOutlined,
+    VideoCameraOutlined,
 } from '@ant-design/icons-vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -84,7 +85,7 @@ interface MenuMeta {
     menu?: boolean
     menuGroup?: boolean
     menuTitle?: string
-    menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'file' | 'upload' | 'user' | 'team' | 'safety' | 'chat' | 'appstore' | 'trophy' | 'music'
+    menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'file' | 'upload' | 'user' | 'team' | 'safety' | 'chat' | 'appstore' | 'trophy' | 'music' | 'video'
     permissionCode?: string
     menuOrder?: number
 }
@@ -103,6 +104,7 @@ const iconMap = {
     appstore: AppstoreOutlined,
     trophy: TrophyOutlined,
     music: CustomerServiceOutlined,
+    video: VideoCameraOutlined,
 }
 
 const collapsed = ref<boolean>(true)

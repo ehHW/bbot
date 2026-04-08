@@ -26,6 +26,12 @@ app.mount('#app')
 
 const settingsStore = useSettingsStore(pinia)
 
+const disableDefaultContextMenu = (event: MouseEvent) => {
+    event.preventDefault()
+}
+
+document.addEventListener('contextmenu', disableDefaultContextMenu)
+
 watch(
     () => settingsStore.themeMode,
     (mode) => {

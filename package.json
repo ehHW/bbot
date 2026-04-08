@@ -9,6 +9,7 @@
         "preview": "vite preview",
         "build-only": "vite build",
         "type-check": "vue-tsc --build",
+        "test": "vitest run",
         "format": "oxfmt src/"
     },
     "dependencies": {
@@ -31,12 +32,15 @@
         "@types/nprogress": "^0.2.3",
         "@vitejs/plugin-vue": "^6.0.4",
         "@vue/tsconfig": "^0.9.0",
+        "@vue/test-utils": "^2.4.6",
+        "jsdom": "^26.1.0",
         "npm-run-all2": "^8.0.4",
         "oxfmt": "^0.37.0",
         "typescript": "~5.9.3",
         "unplugin-vue-components": "^32.0.0",
         "vite": "beta",
         "vite-plugin-vue-devtools": "^8.0.7",
+        "vitest": "^3.2.4",
         "vue-tsc": "^3.2.5"
     },
     "engines": {

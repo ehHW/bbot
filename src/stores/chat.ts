@@ -1,37 +1,61 @@
-import { message as antMessage } from 'ant-design-vue'
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import {
-    createFriendRequestApi,
-    createGroupConversationApi,
-    deleteFriendApi,
-    getAdminConversationsApi,
-    getAdminMessagesApi,
-    getConversationDetailApi,
-    getConversationMembersApi,
-    getConversationMessagesApi,
     getConversationsApi,
-    getFriendRequestsApi,
-    getFriendsApi,
     getGroupJoinRequestsApi,
-    handleFriendRequestApi,
-    handleGroupJoinRequestApi,
     hideConversationApi,
-    inviteConversationMemberApi,
-    leaveConversationApi,
-    muteConversationMemberApi,
-    openDirectConversationApi,
-    readConversationApi,
-    removeConversationMemberApi,
-    searchChatApi,
     toggleConversationPinApi,
-    updateConversationPreferenceApi,
-    updateFriendSettingApi,
-    updateGroupConfigApi,
-    updateConversationMemberRoleApi,
 } from '@/api/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useUserStore } from '@/stores/user'
+import {
+    setConversationUnreadInList,
+    sortConversations,
+    syncConversationPreviewInList,
+    syncFriendRemarkInConversations,
+    upsertConversationItem,
+} from '@/stores/chat/conversation'
+import { removeMessageByClientId, upsertMessageItem } from '@/stores/chat/message'
+import {
+    loadMessagesAction,
+    loadOlderMessagesAction,
+    markConversationReadAction,
+    retryMessageAction,
+    sendAssetMessageAction,
+    sendTextMessageAction,
+} from '@/stores/chat/messageActions'
+import {
+    loadFriendRequestsAction,
+    loadFriendsAction,
+    markSeenIdsAction,
+} from '@/stores/chat/friendshipActions'
+import {
+    loadJoinRequestsAction,
+    loadMembersAction,
+} from '@/stores/chat/groupActions'
+import {
+    createGroupConversationScene,
+    openDirectConversationScene,
+    updateConversationPreferencesScene,
+    updateGroupConfigScene,
+} from '@/stores/chat/conversationScenes'
+import {
+    handleFriendRequestScene,
+    removeFriendScene,
+    submitFriendRequestScene,
+    updateFriendRemarkScene,
+} from '@/stores/chat/friendshipScenes'
+import {
+    handleJoinRequestScene,
+    inviteMemberScene,
+    leaveConversationScene,
+    muteMemberScene,
+    removeMemberScene,
+    updateMemberRoleScene,
+} from '@/stores/chat/groupScenes'
+import { initializeChatLifecycle, resetChatLifecycle } from '@/stores/chat/lifecycle'
+import { createChatRealtimeHandler, ensureChatRealtimeSubscription } from '@/stores/chat/realtime'
+import { loadAuditDataScene, runSearchScene } from '@/stores/chat/searchAudit'
 import type {
     ChatConversationItem,
     ChatConversationMemberItem,
@@ -39,32 +63,15 @@ import type {
     ChatFriendshipItem,
     ChatGroupJoinRequestItem,
     ChatGroupNoticeItem,
+    ChatMessageAssetPayload,
     ChatMessageCursor,
     ChatMessageItem,
     ChatSearchResult,
     ChatUserBrief,
 } from '@/types/chat'
-import type { WebSocketMessage } from '@/utils/websocket'
 import { globalWebSocket } from '@/utils/websocket'
 
-type TypingTimer = ReturnType<typeof window.setTimeout>
-
-function sortConversations(items: ChatConversationItem[], sortMode: 'recent' | 'unread') {
-    return [...items].sort((left, right) => {
-        if (left.is_pinned !== right.is_pinned) {
-            return left.is_pinned ? -1 : 1
-        }
-        if (sortMode === 'unread' && left.unread_count !== right.unread_count) {
-            return right.unread_count - left.unread_count
-        }
-        const leftTs = left.last_message_at ? new Date(left.last_message_at).getTime() : 0
-        const rightTs = right.last_message_at ? new Date(right.last_message_at).getTime() : 0
-        if (leftTs !== rightTs) {
-            return rightTs - leftTs
-        }
-        return right.id - left.id
-    })
-}
+type TypingTimer = ReturnType<typeof setTimeout>
 
 export const useChatStore = defineStore('chat', () => {
     const userStore = useUserStore()
@@ -94,8 +101,8 @@ export const useChatStore = defineStore('chat', () => {
     const joinRequestMap = reactive<Record<number, ChatGroupJoinRequestItem[]>>({})
     const typingMap = reactive<Record<number, ChatUserBrief[]>>({})
     const typingTimers = new Map<string, TypingTimer>()
-    let sendingFallbackTimer: ReturnType<typeof window.setTimeout> | null = null
-    let sendingSyncTimer: ReturnType<typeof window.setTimeout> | null = null
+    const sendingFallbackTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+    const sendingSyncTimer = ref<ReturnType<typeof setTimeout> | null>(null)
     let wsUnsubscribe: (() => void) | null = null
 
     const activeConversation = computed(() => conversations.value.find((item) => item.id === activeConversationId.value) || null)
@@ -117,13 +124,13 @@ export const useChatStore = defineStore('chat', () => {
 
     const clearSendingState = () => {
         sending.value = false
-        if (sendingFallbackTimer) {
-            window.clearTimeout(sendingFallbackTimer)
-            sendingFallbackTimer = null
+        if (sendingFallbackTimer.value) {
+            window.clearTimeout(sendingFallbackTimer.value)
+            sendingFallbackTimer.value = null
         }
-        if (sendingSyncTimer) {
-            window.clearTimeout(sendingSyncTimer)
-            sendingSyncTimer = null
+        if (sendingSyncTimer.value) {
+            window.clearTimeout(sendingSyncTimer.value)
+            sendingSyncTimer.value = null
         }
     }
 
@@ -136,44 +143,44 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const upsertConversation = (nextConversation: ChatConversationItem) => {
-        const index = conversations.value.findIndex((item) => item.id === nextConversation.id)
-        if (index === -1) {
-            conversations.value = [nextConversation, ...conversations.value]
-            sortCurrentConversations()
-            return
-        }
-        conversations.value.splice(index, 1, { ...conversations.value[index], ...nextConversation })
-        sortCurrentConversations()
+        conversations.value = upsertConversationItem(conversations.value, nextConversation, settingsStore.chatListSortMode)
     }
 
     const syncConversationPreview = (conversationId: number, messageItem: Pick<ChatMessageItem, 'content' | 'created_at'>) => {
-        const conversation = conversations.value.find((item) => item.id === conversationId)
-        if (!conversation) {
-            return
-        }
-        conversation.last_message_preview = String(messageItem.content || '').trim() || conversation.last_message_preview
-        conversation.last_message_at = messageItem.created_at || conversation.last_message_at
-        if (!conversation.show_in_list) {
-            conversation.show_in_list = true
-        }
-        sortCurrentConversations()
+        conversations.value = syncConversationPreviewInList(conversations.value, conversationId, messageItem, settingsStore.chatListSortMode)
     }
 
     const syncFriendRemarkLocally = (friendUserId: number, remark: string) => {
         friends.value = friends.value.map((item) => (item.friend_user.id === friendUserId ? { ...item, remark } : item))
-        conversations.value = conversations.value.map((item) => {
-            if (item.type !== 'direct') {
-                return item
+        conversations.value = syncFriendRemarkInConversations(conversations.value, friendUserId, remark)
+    }
+
+    const resolveActionErrorMessage = (error: unknown, fallback: string) => {
+        const maybeError = error as {
+            message?: string
+            response?: {
+                data?: unknown
             }
-            const directTargetId = item.direct_target?.id
-            if (directTargetId !== friendUserId) {
-                return item
+        }
+        const responseData = maybeError?.response?.data
+        if (typeof responseData === 'string' && responseData.trim()) {
+            return responseData.trim()
+        }
+        if (responseData && typeof responseData === 'object') {
+            const detail = (responseData as { detail?: unknown }).detail
+            if (typeof detail === 'string' && detail.trim()) {
+                return detail.trim()
             }
-            return {
-                ...item,
-                friend_remark: remark || null,
+            for (const value of Object.values(responseData as Record<string, unknown>)) {
+                if (typeof value === 'string' && value.trim()) {
+                    return value.trim()
+                }
+                if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) {
+                    return value[0].trim()
+                }
             }
-        })
+        }
+        return String(maybeError?.message || fallback)
     }
 
     const getLastSequence = (conversationId: number) => {
@@ -184,11 +191,11 @@ export const useChatStore = defineStore('chat', () => {
 
     const removeLocalMessageByClientId = (conversationId: number, clientMessageId: string) => {
         const items = messageMap[conversationId] || []
-        messageMap[conversationId] = items.filter((item) => String(item.payload?.client_message_id || '') !== clientMessageId)
+        messageMap[conversationId] = removeMessageByClientId(items, clientMessageId)
         const failedItems = failedMessageMap.value[conversationId] || []
         failedMessageMap.value = {
             ...failedMessageMap.value,
-            [conversationId]: failedItems.filter((item) => String(item.payload?.client_message_id || '') !== clientMessageId),
+            [conversationId]: removeMessageByClientId(failedItems, clientMessageId),
         }
     }
 
@@ -265,6 +272,52 @@ export const useChatStore = defineStore('chat', () => {
         }
     }
 
+    const insertLocalAttachmentMessage = (
+        conversationId: number,
+        options: {
+            clientMessageId: string
+            displayName: string
+            messageType: 'image' | 'file'
+            payload: ChatMessageAssetPayload & { client_message_id: string }
+            status: 'sending' | 'failed'
+            error?: string
+        },
+    ) => {
+        const tempMessage: ChatMessageItem = {
+            id: -Date.now(),
+            sequence: getLastSequence(conversationId) + 0.01,
+            message_type: options.messageType,
+            content: options.displayName,
+            payload: { ...options.payload },
+            is_system: false,
+            sender: userStore.user
+                ? {
+                    id: userStore.user.id,
+                    username: userStore.user.username,
+                    display_name: userStore.user.display_name,
+                    avatar: userStore.user.avatar,
+                }
+                : null,
+            created_at: new Date().toISOString(),
+            local_status: options.status,
+            local_error: options.error || null,
+        }
+        const items = messageMap[conversationId] || []
+        messageMap[conversationId] = [...items, tempMessage]
+        if (options.status === 'failed') {
+            upsertFailedMessage(conversationId, tempMessage)
+        }
+        const conversation = conversations.value.find((item) => item.id === conversationId)
+        if (conversation) {
+            conversation.last_message_preview = options.displayName
+            conversation.last_message_at = tempMessage.created_at
+            if (!conversation.show_in_list) {
+                conversation.show_in_list = true
+            }
+            sortCurrentConversations()
+        }
+    }
+
     const reconcileLocalMessage = (conversationId: number, clientMessageId: string | null | undefined, nextMessage: ChatMessageItem) => {
         if (clientMessageId) {
             removeLocalMessageByClientId(conversationId, clientMessageId)
@@ -285,155 +338,64 @@ export const useChatStore = defineStore('chat', () => {
         updateLocalMessageStatus(conversationId, clientMessageId, 'failed', error)
     }
 
+    const sendAttachmentMessageByReference = async (options: {
+        sourceAssetReferenceId: number
+        displayName: string
+        mediaType: string
+        mimeType?: string
+        fileSize?: number
+        url?: string
+        quotedMessageId?: number
+        existingClientMessageId?: string
+    }) => {
+        await sendAssetMessageAction({
+            ...options,
+            activeConversation,
+            friends,
+            currentUserId: userStore.user?.id,
+            insertLocalAttachmentMessage,
+            updateLocalMessageStatus,
+            clearSendingState,
+            setSending: (value) => {
+                sending.value = value
+            },
+            scheduleFallback: (conversationId, clientMessageId) => {
+                if (sendingFallbackTimer.value) {
+                    clearTimeout(sendingFallbackTimer.value)
+                }
+                sendingFallbackTimer.value = setTimeout(() => {
+                    updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '发送超时，请重试')
+                    clearSendingState()
+                }, 12000)
+            },
+            scheduleSync: (conversationId, clientMessageId) => {
+                if (sendingSyncTimer.value) {
+                    clearTimeout(sendingSyncTimer.value)
+                }
+                sendingSyncTimer.value = setTimeout(() => {
+                    void loadMessages(conversationId)
+                        .catch(() => undefined)
+                        .finally(() => {
+                            updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '发送状态未知，请重试')
+                            clearSendingState()
+                        })
+                }, 1500)
+            },
+        })
+    }
+
     const setConversationUnread = (conversationId: number, unreadCount: number, lastReadSequence?: number) => {
-        const target = conversations.value.find((item) => item.id === conversationId)
-        if (!target) {
-            return
-        }
-        target.unread_count = unreadCount
-        if (typeof lastReadSequence === 'number') {
-            target.last_read_sequence = lastReadSequence
-        }
+        setConversationUnreadInList(conversations.value, conversationId, unreadCount, lastReadSequence)
     }
 
     const upsertMessage = (conversationId: number, nextMessage: ChatMessageItem) => {
         const items = messageMap[conversationId] || []
-        const index = items.findIndex((item) => item.id === nextMessage.id)
-        if (index === -1) {
-            messageMap[conversationId] = [...items, nextMessage].sort((left, right) => left.sequence - right.sequence)
-            return
-        }
-        items.splice(index, 1, { ...items[index], ...nextMessage })
-        messageMap[conversationId] = [...items]
+        messageMap[conversationId] = upsertMessageItem(items, nextMessage)
     }
 
     const removeTypingUser = (conversationId: number, userId: number) => {
         const current = typingMap[conversationId] || []
         typingMap[conversationId] = current.filter((item) => item.id !== userId)
-    }
-
-    const handleTypingPayload = (payload: WebSocketMessage) => {
-        const conversationId = Number(payload.conversation_id)
-        const user = payload.user as ChatUserBrief | undefined
-        if (!conversationId || !user || user.id === userStore.user?.id) {
-            return
-        }
-        if (!payload.is_typing) {
-            removeTypingUser(conversationId, user.id)
-            return
-        }
-        const key = `${conversationId}:${user.id}`
-        const current = typingMap[conversationId] || []
-        if (!current.some((item) => item.id === user.id)) {
-            typingMap[conversationId] = [...current, user]
-        }
-        const previousTimer = typingTimers.get(key)
-        if (previousTimer) {
-            window.clearTimeout(previousTimer)
-        }
-        typingTimers.set(
-            key,
-            window.setTimeout(() => {
-                removeTypingUser(conversationId, user.id)
-                typingTimers.delete(key)
-            }, 3000),
-        )
-    }
-
-    const handleSocketMessage = async (payload: WebSocketMessage) => {
-        if (!payload || typeof payload.type !== 'string') {
-            return
-        }
-        if (payload.type === 'error') {
-            antMessage.error(String(payload.message || '聊天操作失败'))
-            markLatestSendingMessageFailed(activeConversationId.value, String(payload.message || '发送失败'))
-            clearSendingState()
-            return
-        }
-        if (payload.type === 'chat_message_ack') {
-            const conversation = payload.conversation as ChatConversationItem | undefined
-            const nextMessage = payload.message as ChatMessageItem | undefined
-            const clientMessageId = typeof payload.client_message_id === 'string' ? payload.client_message_id : undefined
-            if (conversation) {
-                upsertConversation(conversation)
-            }
-            if (conversation && nextMessage) {
-                reconcileLocalMessage(conversation.id, clientMessageId, nextMessage)
-                syncConversationPreview(conversation.id, nextMessage)
-            }
-            clearSendingState()
-            return
-        }
-        if (payload.type === 'chat_new_message') {
-            const conversationId = Number(payload.conversation_id)
-            const nextMessage = payload.message as ChatMessageItem | undefined
-            if (conversationId && nextMessage) {
-                upsertMessage(conversationId, { ...nextMessage, local_status: null, local_error: null })
-                syncConversationPreview(conversationId, nextMessage)
-                if (nextMessage.sender?.id === userStore.user?.id) {
-                    clearSendingState()
-                }
-                if (activeConversationId.value === conversationId && document.visibilityState === 'visible') {
-                    await markConversationRead(conversationId, nextMessage.sequence)
-                }
-            }
-            return
-        }
-        if (payload.type === 'chat_conversation_updated') {
-            const conversation = payload.conversation as ChatConversationItem | undefined
-            if (conversation) {
-                upsertConversation(conversation)
-            }
-            return
-        }
-        if (payload.type === 'chat_unread_updated') {
-            setConversationUnread(Number(payload.conversation_id), Number(payload.unread_count || 0), Number(payload.last_read_sequence || 0) || undefined)
-            return
-        }
-        if (payload.type === 'chat_friend_request_updated') {
-            await loadFriendRequests()
-            return
-        }
-        if (payload.type === 'chat_friendship_updated') {
-            const action = String(payload.action || '')
-            if (action === 'updated') {
-                return
-            }
-            await Promise.all([loadFriends(), loadConversations()])
-            return
-        }
-        if (payload.type === 'chat_group_join_request_updated') {
-            const joinRequest = payload.join_request as ChatGroupJoinRequestItem | undefined
-            if (joinRequest?.conversation_id) {
-                await loadJoinRequests(joinRequest.conversation_id)
-            }
-            await loadGlobalGroupJoinRequests()
-            return
-        }
-        if (payload.type === 'chat_typing') {
-            handleTypingPayload(payload)
-            return
-        }
-        if (payload.type === 'system_notice' && payload.category === 'chat' && payload.message) {
-            const noticePayload = (payload.payload || {}) as Record<string, unknown>
-            appendGroupNotice({
-                id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-                conversation_id: typeof noticePayload.conversation_id === 'number' ? noticePayload.conversation_id : null,
-                message: String(payload.message),
-                created_at: new Date().toISOString(),
-                payload: noticePayload,
-            })
-            antMessage.info(String(payload.message))
-        }
-    }
-
-    const ensureWsSubscription = () => {
-        if (wsUnsubscribe) {
-            return
-        }
-        wsUnsubscribe = globalWebSocket.subscribe((payload) => {
-            void handleSocketMessage(payload)
-        })
     }
 
     const loadConversations = async (sortMode: 'recent' | 'unread' = 'recent') => {
@@ -456,43 +418,24 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const loadFriends = async () => {
-        const { data } = await getFriendsApi()
-        friends.value = data.results
+        await loadFriendsAction(friends)
     }
 
     const loadFriendRequests = async () => {
-        const [received, sent] = await Promise.all([
-            getFriendRequestsApi({ direction: 'received' }),
-            getFriendRequestsApi({ direction: 'sent' }),
-        ])
-        receivedRequests.value = received.data.results
-        sentRequests.value = sent.data.results
-        const validIds = new Set([...received.data.results, ...sent.data.results].map((item) => item.id))
-        seenFriendNoticeIds.value = seenFriendNoticeIds.value.filter((id) => validIds.has(id))
-        const validPendingReceivedIds = new Set(received.data.results.filter((item) => item.status === 'pending').map((item) => item.id))
-        seenPendingRequestIds.value = seenPendingRequestIds.value.filter((id) => validPendingReceivedIds.has(id))
+        await loadFriendRequestsAction({
+            receivedRequests,
+            sentRequests,
+            seenFriendNoticeIds,
+            seenPendingRequestIds,
+        })
     }
 
     const markPendingRequestsSeen = (requestIds: number[]) => {
-        if (!requestIds.length) {
-            return
-        }
-        const seen = new Set(seenPendingRequestIds.value)
-        for (const id of requestIds) {
-            seen.add(id)
-        }
-        seenPendingRequestIds.value = [...seen]
+        markSeenIdsAction(seenPendingRequestIds, requestIds)
     }
 
     const markFriendNoticesSeen = (requestIds: number[]) => {
-        if (!requestIds.length) {
-            return
-        }
-        const seen = new Set(seenFriendNoticeIds.value)
-        for (const id of requestIds) {
-            seen.add(id)
-        }
-        seenFriendNoticeIds.value = [...seen]
+        markSeenIdsAction(seenFriendNoticeIds, requestIds)
     }
 
     const loadGlobalGroupJoinRequests = async () => {
@@ -501,52 +444,17 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const loadMessages = async (conversationId: number, params?: { before_sequence?: number; after_sequence?: number; around_sequence?: number; limit?: number }) => {
-        loadingMessages.value = true
-        try {
-            const { data } = await getConversationMessagesApi(conversationId, params)
-            const current = (messageMap[conversationId] || []).filter((item) => {
-                const localClientMessageId = String(item.payload?.client_message_id || '')
-                if (!localClientMessageId || !item.local_status) {
-                    return true
-                }
-                return !data.items.some((serverItem) => serverItem.client_message_id === localClientMessageId)
-            })
-            const persistedFailed = (failedMessageMap.value[conversationId] || []).filter((item) => {
-                const localClientMessageId = String(item.payload?.client_message_id || '')
-                return localClientMessageId && !data.items.some((serverItem) => serverItem.client_message_id === localClientMessageId)
-            })
-            const merged = [...current]
-            for (const item of persistedFailed) {
-                const index = merged.findIndex((currentItem) => String(currentItem.payload?.client_message_id || '') === String(item.payload?.client_message_id || ''))
-                if (index === -1) {
-                    merged.push(item)
-                } else {
-                    merged.splice(index, 1, item)
-                }
-            }
-            for (const item of data.items) {
-                const index = merged.findIndex((currentItem) => currentItem.id === item.id)
-                if (index === -1) {
-                    merged.push(item)
-                } else {
-                    merged.splice(index, 1, item)
-                }
-            }
-            messageMap[conversationId] = merged.sort((left, right) => left.sequence - right.sequence)
-            cursorMap[conversationId] = data.cursor
-            const detail = await getConversationDetailApi(conversationId)
-            upsertConversation(detail.data)
-            if (detail.data.type === 'group') {
-                await loadMembers(conversationId)
-            }
-            const lastMessage = data.items.at(-1)
-            const lastSequence = lastMessage?.sequence || 0
-            if (lastSequence && detail.data.unread_count > 0) {
-                await markConversationRead(conversationId, lastSequence)
-            }
-        } finally {
-            loadingMessages.value = false
-        }
+        await loadMessagesAction({
+            conversationId,
+            params,
+            loadingMessages,
+            messageMap,
+            failedMessageMap,
+            cursorMap,
+            upsertConversation,
+            loadMembers,
+            markConversationRead,
+        })
     }
 
     const selectConversation = async (conversationId: number, options?: { focusSequence?: number }) => {
@@ -557,106 +465,83 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const loadOlderMessages = async (conversationId: number) => {
-        const cursor = cursorMap[conversationId]
-        if (!cursor?.has_more_before || !cursor.before_sequence) {
-            return
-        }
-        await loadMessages(conversationId, { before_sequence: cursor.before_sequence, limit: 30 })
+        await loadOlderMessagesAction({ conversationId, cursorMap, loadMessages })
     }
 
     const markConversationRead = async (conversationId: number, lastReadSequence: number) => {
-        if (!lastReadSequence) {
-            return
-        }
-        if (globalWebSocket.connected.value) {
-            globalWebSocket.send({ type: 'chat_mark_read', conversation_id: conversationId, last_read_sequence: lastReadSequence })
-            return
-        }
-        const { data } = await readConversationApi(conversationId, lastReadSequence)
-        setConversationUnread(conversationId, data.unread_count, data.last_read_sequence)
+        await markConversationReadAction({ conversationId, lastReadSequence, setConversationUnread })
     }
 
-    const sendTextMessage = async (content: string) => {
-        if (!activeConversation.value) {
-            throw new Error('请先选择会话')
-        }
-        const text = content.trim()
-        if (!text) {
-            throw new Error('消息不能为空')
-        }
-        if (!globalWebSocket.connected.value) {
-            throw new Error('WebSocket 未连接，当前无法发送消息')
-        }
-        const clientMessageId = `chat_${Date.now()}_${Math.random().toString(16).slice(2)}`
-        const directConversationDeletedFriend =
-            activeConversation.value.type === 'direct' && !friends.value.some((item) => item.direct_conversation?.id === activeConversation.value?.id)
-        if (directConversationDeletedFriend) {
-            insertLocalMessage(activeConversation.value.id, text, clientMessageId, 'failed', '你们已不是好友，当前私聊消息发送失败')
-            throw new Error('你们已不是好友，当前私聊消息发送失败')
-        }
-        insertLocalMessage(activeConversation.value.id, text, clientMessageId, 'sending')
-        sending.value = true
-        if (sendingFallbackTimer) {
-            window.clearTimeout(sendingFallbackTimer)
-        }
-        sendingFallbackTimer = window.setTimeout(() => {
-            updateLocalMessageStatus(activeConversation.value?.id || 0, clientMessageId, 'failed', '发送超时，请重试')
-            clearSendingState()
-        }, 12000)
-        const sent = globalWebSocket.send({
-            type: 'chat_send_message',
-            conversation_id: activeConversation.value.id,
-            content: text,
-            client_message_id: clientMessageId,
-        })
-        if (!sent) {
-            updateLocalMessageStatus(activeConversation.value.id, clientMessageId, 'failed', '消息发送失败，WebSocket 未就绪')
-            clearSendingState()
-            throw new Error('消息发送失败，WebSocket 未就绪')
-        }
-        sendingSyncTimer = window.setTimeout(() => {
-            const currentConversationId = activeConversation.value?.id
-            if (!currentConversationId) {
-                clearSendingState()
-                return
-            }
-            void loadMessages(currentConversationId)
-                .catch(() => undefined)
-                .finally(() => {
-                    updateLocalMessageStatus(currentConversationId, clientMessageId, 'failed', '发送状态未知，请重试')
+    const sendTextMessage = async (content: string, quotedMessageId?: number) => {
+        await sendTextMessageAction({
+            content,
+            quotedMessageId,
+            activeConversation,
+            friends,
+            currentUserId: userStore.user?.id,
+            insertLocalMessage,
+            updateLocalMessageStatus,
+            clearSendingState,
+            setSending: (value) => {
+                sending.value = value
+            },
+            scheduleFallback: (conversationId, clientMessageId) => {
+                if (sendingFallbackTimer.value) {
+                    clearTimeout(sendingFallbackTimer.value)
+                }
+                sendingFallbackTimer.value = setTimeout(() => {
+                    updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '发送超时，请重试')
                     clearSendingState()
-                })
-        }, 1500)
+                }, 12000)
+            },
+            scheduleSync: (conversationId, clientMessageId) => {
+                if (sendingSyncTimer.value) {
+                    clearTimeout(sendingSyncTimer.value)
+                }
+                sendingSyncTimer.value = setTimeout(() => {
+                    void loadMessages(conversationId)
+                        .catch(() => undefined)
+                        .finally(() => {
+                            updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '发送状态未知，请重试')
+                            clearSendingState()
+                        })
+                }, 1500)
+            },
+        })
+    }
+
+    const sendAttachmentMessage = async (options: {
+        sourceAssetReferenceId: number
+        displayName: string
+        mediaType: string
+        mimeType?: string
+        fileSize?: number
+        url?: string
+        quotedMessageId?: number
+    }) => {
+        await sendAttachmentMessageByReference(options)
     }
 
     const retryMessage = async (messageItem: ChatMessageItem) => {
-        const conversationId = activeConversation.value?.id
-        const retryContent = messageItem.content.trim()
-        const clientMessageId = String(messageItem.payload?.client_message_id || '')
-        if (!conversationId || !clientMessageId || !retryContent) {
+        if (messageItem.message_type === 'image' || messageItem.message_type === 'file') {
+            const attachmentPayload = messageItem.payload as Partial<ChatMessageAssetPayload> & { client_message_id?: string }
+            const sourceAssetReferenceId = Number(attachmentPayload.source_asset_reference_id || attachmentPayload.asset_reference_id || 0)
+            const clientMessageId = String(attachmentPayload.client_message_id || '')
+            if (!sourceAssetReferenceId || !clientMessageId) {
+                return
+            }
+            await sendAttachmentMessageByReference({
+                sourceAssetReferenceId,
+                displayName: attachmentPayload.display_name || messageItem.content,
+                mediaType: attachmentPayload.media_type || messageItem.message_type,
+                mimeType: attachmentPayload.mime_type,
+                fileSize: attachmentPayload.file_size,
+                url: attachmentPayload.url,
+                existingClientMessageId: clientMessageId,
+            })
             return
         }
-        updateLocalMessageStatus(conversationId, clientMessageId, 'sending')
-        try {
-            const directConversationDeletedFriend =
-                activeConversation.value?.type === 'direct' && !friends.value.some((item) => item.direct_conversation?.id === activeConversation.value?.id)
-            if (directConversationDeletedFriend) {
-                updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '你们已不是好友，当前私聊消息发送失败')
-                throw new Error('你们已不是好友，当前私聊消息发送失败')
-            }
-            const sent = globalWebSocket.send({
-                type: 'chat_send_message',
-                conversation_id: conversationId,
-                content: retryContent,
-                client_message_id: clientMessageId,
-            })
-            if (!sent) {
-                updateLocalMessageStatus(conversationId, clientMessageId, 'failed', '消息发送失败，WebSocket 未就绪')
-                throw new Error('消息发送失败，WebSocket 未就绪')
-            }
-        } catch (error) {
-            throw error
-        }
+        await retryMessageAction({ messageItem, activeConversation, friends, currentUserId: userStore.user?.id, updateLocalMessageStatus })
     }
 
     const toggleConversationPin = async (conversationId: number, isPinned: boolean) => {
@@ -685,11 +570,13 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const openDirectConversation = async (targetUserId: number) => {
-        const { data } = await openDirectConversationApi(targetUserId)
-        await loadConversations()
-        await loadContactGroupConversations()
-        await loadFriends()
-        await selectConversation(data.conversation.id)
+        await openDirectConversationScene({
+            targetUserId,
+            loadConversations,
+            loadContactGroupConversations,
+            loadFriends,
+            selectConversation,
+        })
     }
 
     const createGroupConversation = async (payload: {
@@ -698,32 +585,23 @@ export const useChatStore = defineStore('chat', () => {
         join_approval_required: boolean
         allow_member_invite: boolean
     }) => {
-        const { data } = await createGroupConversationApi(payload)
-        await loadConversations()
-        await loadContactGroupConversations()
-        await selectConversation(data.conversation.id)
+        await createGroupConversationScene({
+            payload,
+            loadConversations,
+            loadContactGroupConversations,
+            selectConversation,
+        })
     }
 
     const updateGroupConfig = async (
         conversationId: number,
         payload: { name?: string; avatar?: string; join_approval_required?: boolean; allow_member_invite?: boolean; max_members?: number | null; mute_all?: boolean },
     ) => {
-        const { data } = await updateGroupConfigApi(conversationId, payload)
-        const target = conversations.value.find((item) => item.id === conversationId)
-        if (target && target.group_config) {
-            target.group_config = {
-                ...target.group_config,
-                ...data.group_config,
-            }
-        }
-        upsertConversation(data.conversation)
-        return data.group_config
+        return updateGroupConfigScene({ conversationId, payload, conversations, upsertConversation })
     }
 
     const updateConversationPreferences = async (conversationId: number, payload: { mute_notifications?: boolean; group_nickname?: string }) => {
-        const { data } = await updateConversationPreferenceApi(conversationId, payload)
-        upsertConversation(data.conversation)
-        return data.member_settings
+        return updateConversationPreferencesScene({ conversationId, payload, upsertConversation })
     }
 
     const setFocusedSequence = (conversationId: number, sequence: number | null) => {
@@ -735,139 +613,142 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const loadMembers = async (conversationId: number) => {
-        const conversation = conversations.value.find((item) => item.id === conversationId)
-        if (conversation?.type !== 'group') {
-            memberMap[conversationId] = []
-            return
-        }
-        const { data } = await getConversationMembersApi(conversationId)
-        memberMap[conversationId] = data.items
+        await loadMembersAction({ conversationId, conversations, memberMap })
     }
 
     const inviteMember = async (conversationId: number, targetUserId: number) => {
-        await inviteConversationMemberApi(conversationId, targetUserId)
-        await Promise.all([loadMembers(conversationId), loadJoinRequests(conversationId), loadConversations()])
-        await loadContactGroupConversations()
+        await inviteMemberScene({
+            conversationId,
+            targetUserId,
+            loadMembers,
+            loadJoinRequests,
+            loadConversations,
+            loadContactGroupConversations,
+        })
     }
 
     const removeMember = async (conversationId: number, userId: number) => {
-        await removeConversationMemberApi(conversationId, userId)
-        await Promise.all([loadMembers(conversationId), loadConversations()])
-        await loadContactGroupConversations()
+        await removeMemberScene({ conversationId, userId, loadMembers, loadConversations, loadContactGroupConversations })
     }
 
     const updateMemberRole = async (conversationId: number, userId: number, role: 'admin' | 'member') => {
-        await updateConversationMemberRoleApi(conversationId, userId, role)
-        await loadMembers(conversationId)
+        await updateMemberRoleScene({ conversationId, userId, role, loadMembers })
     }
 
     const muteMember = async (conversationId: number, userId: number, muteMinutes: number, reason?: string) => {
-        await muteConversationMemberApi(conversationId, userId, muteMinutes, reason)
-        await loadMembers(conversationId)
+        await muteMemberScene({ conversationId, userId, muteMinutes, reason, loadMembers })
     }
 
     const leaveConversation = async (conversationId: number) => {
-        await leaveConversationApi(conversationId)
-        await loadConversations()
-        await loadContactGroupConversations()
+        await leaveConversationScene({ conversationId, loadConversations, loadContactGroupConversations })
     }
 
     const loadJoinRequests = async (conversationId: number) => {
-        const { data } = await getGroupJoinRequestsApi({ conversation_id: conversationId })
-        joinRequestMap[conversationId] = data.results
+        await loadJoinRequestsAction(joinRequestMap, conversationId)
+    }
+
+    const handleSocketMessage = createChatRealtimeHandler({
+        activeConversationId,
+        getCurrentUserId: () => userStore.user?.id,
+        typingMap,
+        typingTimers,
+        appendGroupNotice,
+        clearSendingState,
+        loadConversations: () => loadConversations(),
+        loadFriendRequests,
+        loadFriends,
+        loadGlobalGroupJoinRequests,
+        loadJoinRequests,
+        markConversationRead,
+        markLatestSendingMessageFailed,
+        reconcileLocalMessage,
+        removeTypingUser,
+        setConversationUnread,
+        syncConversationPreview,
+        upsertConversation,
+        upsertMessage,
+    })
+
+    const ensureWsSubscription = () => {
+        ensureChatRealtimeSubscription({
+            currentUnsubscribe: wsUnsubscribe,
+            handler: handleSocketMessage,
+            setUnsubscribe: (unsubscribe) => {
+                wsUnsubscribe = unsubscribe
+            },
+        })
     }
 
     const handleJoinRequest = async (requestId: number, action: 'approve' | 'reject' | 'cancel', conversationId: number) => {
-        await handleGroupJoinRequestApi(requestId, { action })
-        await Promise.all([loadJoinRequests(conversationId), loadMembers(conversationId), loadConversations()])
+        await handleJoinRequestScene({ requestId, action, conversationId, loadJoinRequests, loadMembers, loadConversations })
     }
 
     const submitFriendRequest = async (toUserId: number, requestMessage?: string) => {
-        await createFriendRequestApi({ to_user_id: toUserId, request_message: requestMessage })
-        await loadFriendRequests()
+        await submitFriendRequestScene({ toUserId, requestMessage, loadFriendRequests })
     }
 
     const handleFriendRequest = async (requestId: number, action: 'accept' | 'reject' | 'cancel') => {
-        await handleFriendRequestApi(requestId, action)
-        await Promise.allSettled([loadFriendRequests(), loadFriends(), loadConversations(), loadContactGroupConversations()])
+        await handleFriendRequestScene({ requestId, action, loadFriendRequests, loadFriends, loadConversations, loadContactGroupConversations })
     }
 
     const removeFriend = async (friendUserId: number) => {
-        await deleteFriendApi(friendUserId)
-        await Promise.allSettled([loadFriends(), loadConversations()])
+        await removeFriendScene({ friendUserId, loadFriends, loadConversations })
     }
 
     const updateFriendRemark = async (friendUserId: number, remark: string) => {
-        const { data } = await updateFriendSettingApi(friendUserId, { remark })
-        syncFriendRemarkLocally(friendUserId, data.remark)
+        await updateFriendRemarkScene({ friendUserId, remark, friends, conversations, syncFriendRemarkLocally })
     }
 
     const runSearch = async (keyword: string) => {
-        const { data } = await searchChatApi({ keyword, limit: 10 })
-        searchResult.value = data
+        await runSearchScene(keyword, searchResult)
     }
 
     const loadAuditData = async (keyword = '', conversationId?: number) => {
-        if (!isAuditAvailable.value) {
-            adminConversations.value = []
-            adminMessages.value = []
-            return
-        }
-        const [conversationResponse, messageResponse] = await Promise.all([
-            getAdminConversationsApi({ keyword: keyword || undefined }),
-            getAdminMessagesApi({ keyword: keyword || undefined, conversation_id: conversationId }),
-        ])
-        adminConversations.value = conversationResponse.data.results
-        adminMessages.value = messageResponse.data.results
+        await loadAuditDataScene({ keyword, conversationId, isAuditAvailable, adminConversations, adminMessages })
     }
 
     const initialize = async (sortMode: 'recent' | 'unread' = 'recent') => {
-        clearSendingState()
-        ensureWsSubscription()
-        await Promise.all([loadConversations(sortMode), loadFriends(), loadFriendRequests(), loadGlobalGroupJoinRequests(), loadContactGroupConversations()])
-        initialized.value = true
-        if (activeConversationId.value) {
-            await loadMessages(activeConversationId.value)
-        }
+        await initializeChatLifecycle({
+            clearSendingState,
+            ensureWsSubscription,
+            loadConversations,
+            loadFriends,
+            loadFriendRequests,
+            loadGlobalGroupJoinRequests,
+            loadContactGroupConversations,
+            loadMessages: (conversationId) => loadMessages(conversationId),
+            activeConversationId,
+            initialized,
+            sortMode,
+        })
     }
 
     const reset = () => {
-        conversations.value = []
-        friends.value = []
-        receivedRequests.value = []
-        sentRequests.value = []
-        seenPendingRequestIds.value = []
-        seenFriendNoticeIds.value = []
-        searchResult.value = null
-        adminConversations.value = []
-        adminMessages.value = []
-        groupNoticeItems.value = []
-        globalGroupJoinRequests.value = []
-        contactGroupConversations.value = []
-        failedMessageMap.value = {}
-        activeConversationId.value = null
-        for (const key of Object.keys(messageMap)) {
-            delete messageMap[Number(key)]
-        }
-        for (const key of Object.keys(cursorMap)) {
-            delete cursorMap[Number(key)]
-        }
-        for (const key of Object.keys(memberMap)) {
-            delete memberMap[Number(key)]
-        }
-        for (const key of Object.keys(joinRequestMap)) {
-            delete joinRequestMap[Number(key)]
-        }
-        for (const key of Object.keys(typingMap)) {
-            delete typingMap[Number(key)]
-        }
-        for (const key of Object.keys(focusedSequenceMap)) {
-            delete focusedSequenceMap[Number(key)]
-        }
-        typingTimers.forEach((timer) => window.clearTimeout(timer))
-        typingTimers.clear()
-        clearSendingState()
-        initialized.value = false
+        resetChatLifecycle({
+            conversations,
+            friends,
+            receivedRequests,
+            sentRequests,
+            seenPendingRequestIds,
+            seenFriendNoticeIds,
+            searchResult,
+            adminConversations,
+            adminMessages,
+            groupNoticeItems,
+            globalGroupJoinRequests,
+            contactGroupConversations,
+            failedMessageMap,
+            activeConversationId,
+            messageMap,
+            cursorMap,
+            memberMap,
+            joinRequestMap,
+            typingMap,
+            focusedSequenceMap,
+            typingTimers,
+            clearSendingState,
+            initialized,
+        })
     }
 
     return {
@@ -915,6 +796,7 @@ export const useChatStore = defineStore('chat', () => {
         markFriendNoticesSeen,
         selectConversation,
         sendTextMessage,
+        sendAttachmentMessage,
         sendTyping,
         markConversationRead,
         hideConversation,

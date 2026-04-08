@@ -9,6 +9,19 @@ export interface AppSettings {
     chatListSortMode: 'recent' | 'unread'
     chatStealthInspectEnabled: boolean
     chatSendHotkey: 'enter' | 'ctrl_enter'
+    chatLayout: ChatLayoutSettings
+}
+
+export interface ChatLayoutSettings {
+    menuWidth: number
+    listWidth: number
+    composerHeight: number
+}
+
+const defaultChatLayout: ChatLayoutSettings = {
+    menuWidth: 72,
+    listWidth: 320,
+    composerHeight: 188,
 }
 
 const defaultSettings: AppSettings = {
@@ -18,6 +31,7 @@ const defaultSettings: AppSettings = {
     chatListSortMode: 'recent',
     chatStealthInspectEnabled: false,
     chatSendHotkey: 'ctrl_enter',
+    chatLayout: { ...defaultChatLayout },
 }
 
 export const useSettingsStore = defineStore(
@@ -34,6 +48,7 @@ export const useSettingsStore = defineStore(
                 chatReceiveNotification: normalizeBoolean(next.chatReceiveNotification, settings.value.chatReceiveNotification),
                 chatStealthInspectEnabled: normalizeBoolean(next.chatStealthInspectEnabled, settings.value.chatStealthInspectEnabled),
                 chatSendHotkey: normalizeChatSendHotkey(next.chatSendHotkey ?? settings.value.chatSendHotkey),
+                chatLayout: normalizeChatLayout(next.chatLayout ?? settings.value.chatLayout),
             }
         }
 
@@ -47,6 +62,7 @@ export const useSettingsStore = defineStore(
         const chatListSortMode = computed(() => settings.value.chatListSortMode)
         const chatStealthInspectEnabled = computed(() => settings.value.chatStealthInspectEnabled)
         const chatSendHotkey = computed(() => settings.value.chatSendHotkey)
+        const chatLayout = computed(() => settings.value.chatLayout)
 
         const loadChatPreferences = async () => {
             const { data } = await getChatSettingsApi()
@@ -57,6 +73,7 @@ export const useSettingsStore = defineStore(
                 chatListSortMode: data.chat_list_sort_mode,
                 chatStealthInspectEnabled: data.chat_stealth_inspect_enabled,
                 chatSendHotkey: normalizeChatSendHotkey(typeof settingsJson.chat_send_hotkey === 'string' ? settingsJson.chat_send_hotkey : undefined),
+                chatLayout: normalizeChatLayout(settingsJson.chat_layout ?? settings.value.chatLayout),
             })
             return data
         }
@@ -72,6 +89,7 @@ export const useSettingsStore = defineStore(
                 chat_stealth_inspect_enabled: settings.value.chatStealthInspectEnabled,
                 settings_json: {
                     chat_send_hotkey: settings.value.chatSendHotkey,
+                    chat_layout: settings.value.chatLayout,
                 },
             })
             const settingsJson = (data.settings_json || {}) as Record<string, unknown>
@@ -81,6 +99,7 @@ export const useSettingsStore = defineStore(
                 chatListSortMode: data.chat_list_sort_mode,
                 chatStealthInspectEnabled: data.chat_stealth_inspect_enabled,
                 chatSendHotkey: normalizeChatSendHotkey(typeof settingsJson.chat_send_hotkey === 'string' ? settingsJson.chat_send_hotkey : undefined),
+                chatLayout: normalizeChatLayout(settingsJson.chat_layout ?? settings.value.chatLayout),
             })
             return data
         }
@@ -93,6 +112,7 @@ export const useSettingsStore = defineStore(
             chatListSortMode,
             chatStealthInspectEnabled,
             chatSendHotkey,
+            chatLayout,
             save,
             reset,
             loadChatPreferences,
@@ -118,4 +138,21 @@ function normalizeBoolean(value: boolean | undefined, fallback: boolean): boolea
 
 function normalizeChatSendHotkey(value: string | undefined): AppSettings['chatSendHotkey'] {
     return value === 'enter' ? 'enter' : 'ctrl_enter'
+}
+
+function normalizeChatLayout(value: unknown): ChatLayoutSettings {
+    if (!value || typeof value !== 'object') {
+        return { ...defaultChatLayout }
+    }
+    const next = value as Partial<ChatLayoutSettings>
+    return {
+        menuWidth: clampLayoutNumber(next.menuWidth, defaultChatLayout.menuWidth, 64, 120),
+        listWidth: clampLayoutNumber(next.listWidth, defaultChatLayout.listWidth, 260, 480),
+        composerHeight: clampLayoutNumber(next.composerHeight, defaultChatLayout.composerHeight, 176, 320),
+    }
+}
+
+function clampLayoutNumber(value: unknown, fallback: number, min: number, max: number): number {
+    const normalized = typeof value === 'number' && Number.isFinite(value) ? value : fallback
+    return Math.min(max, Math.max(min, Math.round(normalized)))
 }

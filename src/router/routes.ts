@@ -279,6 +279,32 @@ export const routes: RouteRecordRaw[] = [
                             },
                         ],
                     },
+                    {
+                        path: 'music',
+                        name: 'EntertainmentMusic',
+                        component: () => import('@/views/Entertainment/Music/index.vue'),
+                        meta: {
+                            title: '音乐',
+                            requiresAuth: true,
+                            menu: true,
+                            menuTitle: '音乐',
+                            menuIcon: 'music',
+                            menuOrder: 2,
+                        },
+                    },
+                    {
+                        path: 'video',
+                        name: 'EntertainmentVideo',
+                        component: () => import('@/views/Entertainment/Video/index.vue'),
+                        meta: {
+                            title: '视频',
+                            requiresAuth: true,
+                            menu: true,
+                            menuTitle: '视频',
+                            menuIcon: 'video',
+                            menuOrder: 3,
+                        },
+                    },
                 ],
             },
             {

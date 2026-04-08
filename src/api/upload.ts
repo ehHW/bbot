@@ -1,5 +1,39 @@
 import instance from '@/utils/request'
 
+export interface AssetPayload {
+    id: number
+    file_md5: string | null
+    sha256: string | null
+    storage_backend: string
+    storage_key: string
+    mime_type: string
+    media_type: string
+    file_size: number
+    original_name: string
+    extension: string
+    width: number | null
+    height: number | null
+    duration_seconds: number | null
+    url: string
+}
+
+export interface AssetReferencePayload {
+    id: number
+    asset_id: number | null
+    owner_user_id: number | null
+    ref_domain: string
+    ref_type: string
+    ref_object_id: string
+    display_name: string
+    parent_reference_id: number | null
+    relative_path_cache: string
+    status: string
+    recycled_at: string | null
+    deleted_at: string | null
+    visibility: string
+    asset: AssetPayload | null
+}
+
 export interface FileEntryItem {
     id: number
     display_name: string
@@ -18,6 +52,9 @@ export interface FileEntryItem {
     expires_at: string | null
     remaining_days: number | null
     recycle_original_parent_id: number | null
+    asset_reference_id?: number | null
+    asset_reference?: AssetReferencePayload | null
+    asset?: AssetPayload | null
 }
 
 export interface FileEntriesResponse {
@@ -126,7 +163,7 @@ export const mergeChunksApi = (payload: {
     parent_id?: number | null
     relative_path?: string
 }) => {
-    return instance.post<{ task_id: string; message: string }>('upload/merge/', payload, {
+    return instance.post<{ task_id: string; message: string; asset_reference_id?: number }>('upload/merge/', payload, {
         timeout: 30000,
     })
 }

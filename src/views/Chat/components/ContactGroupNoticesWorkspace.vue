@@ -3,16 +3,16 @@
         <header class="chat-workspace__header">
             <div>
                 <div class="chat-workspace__title">群通知</div>
-                <div class="chat-workspace__subtitle">展示入群申请和群相关系统消息</div>
+                <div class="chat-workspace__subtitle">展示入群申请与群聊相关通知</div>
             </div>
         </header>
 
-        <a-divider orientation="left">待处理入群申请</a-divider>
+        <a-divider orientation="left">入群申请</a-divider>
         <div class="drawer-list">
             <div v-for="request in chatStore.globalGroupJoinRequests" :key="request.id" class="drawer-list-item request-item">
                 <div>
-                    <div class="drawer-list-title">会话 #{{ request.conversation_id }}</div>
-                    <div class="drawer-list-desc">{{ request.target_user.display_name || request.target_user.username }} 申请加入</div>
+                    <div class="drawer-list-title">{{ request.target_user.display_name || request.target_user.username }} 申请加入群聊</div>
+                    <div class="drawer-list-desc">群聊 #{{ request.conversation_id }} · {{ formatDateTime(request.created_at) }}</div>
                 </div>
                 <a-space>
                     <a-button size="small" type="primary" @click="handleJoinRequestAction(request.id, 'approve', request.conversation_id)">通过</a-button>

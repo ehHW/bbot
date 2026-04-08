@@ -64,6 +64,56 @@ export interface ChatMessageItem {
     local_error?: string | null
 }
 
+export interface ChatMessageAssetPayload {
+    asset_reference_id: number
+    source_asset_reference_id?: number
+    display_name: string
+    media_type: string
+    mime_type?: string
+    file_size?: number
+    url?: string
+}
+
+export interface ChatMessageReplyPayload {
+    id: number
+    sequence: number
+    message_type: ChatMessageType
+    sender_name: string
+    content_preview: string
+}
+
+export interface ChatMessageForwardedPayload {
+    id: number
+    sequence: number
+    conversation_id: number
+    message_type: ChatMessageType
+    sender_name: string
+    content_preview: string
+}
+
+export interface ChatGroupInvitationPayload {
+    conversation_id: number
+    group_name: string
+    group_avatar: string
+    member_count: number
+    join_approval_required: boolean
+    inviter: ChatUserBrief
+}
+
+export interface ChatComposerAttachmentToken {
+    token_id: string
+    source_asset_reference_id: number
+    display_name: string
+    media_type: string
+    mime_type?: string
+    file_size?: number
+    url?: string
+}
+
+export type ChatComposerSegment =
+    | { kind: 'text'; text: string }
+    | { kind: 'attachment'; attachment: ChatComposerAttachmentToken }
+
 export interface ChatMessageCursor {
     before_sequence: number | null
     after_sequence: number | null
