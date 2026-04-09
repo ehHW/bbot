@@ -22,6 +22,14 @@ export const updateProfileApi = (payload: {
     return instance.patch<UserItem>('auth/profile/', payload)
 }
 
+export const changePasswordApi = (payload: {
+    current_password: string
+    new_password: string
+    confirm_password: string
+}) => {
+    return instance.post<{ detail: string }>('auth/change-password/', payload)
+}
+
 export const getUsersApi = (params?: {
     page?: number
     page_size?: number

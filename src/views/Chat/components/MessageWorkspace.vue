@@ -19,8 +19,8 @@
                 </a-space>
             </header>
 
-            <div class="chat-main__history-toolbar">
-                <a-button v-if="canLoadOlderMessages" size="small" :loading="chatStore.loadingMessages" @click="handleLoadOlderMessages">加载更早消息</a-button>
+            <div ref="messageContainerRef" class="chat-main__messages">
+                <a-button v-if="canLoadOlderMessages" size="small" class="chat-main__load-more" :loading="chatStore.loadingMessages" @click="handleLoadOlderMessages">加载更早消息</a-button>
                 <div v-if="messageSelectionMode" class="chat-main__selection-bar">
                     <span>已选择 {{ selectedMessageIds.length }} 条消息</span>
                     <a-space>
@@ -28,9 +28,6 @@
                         <a-button size="small" @click="clearMessageSelection">取消多选</a-button>
                     </a-space>
                 </div>
-            </div>
-
-            <div ref="messageContainerRef" class="chat-main__messages">
                 <div
                     v-for="messageItem in chatStore.activeMessages"
                     :key="messageItem.id"
@@ -100,6 +97,9 @@
                                                     <span v-else>点击查看并申请加入</span>
                                                 </div>
                                             </button>
+                                        </template>
+                                        <template v-else-if="isChatRecordMessage(messageItem)">
+                                            <ChatRecordCard :record="getChatRecordPayload(messageItem)!" @open="openChatRecordViewerFromMessage(messageItem)" />
                                         </template>
                                         <template v-else-if="isAssetMessage(messageItem)">
                                             <div class="attachment-bubble" :class="{ self: isSelfMessage(messageItem) }">
@@ -200,7 +200,7 @@
         <a-modal v-model:open="forwardModalOpen" title="选择聊天" :footer="null" :width="CHAT_MODAL_WIDTH_LG">
             <div class="forward-modal">
                 <div class="forward-modal__topbar">
-                    <div class="forward-modal__summary">选择一个聊天目标后会继续弹出确认框</div>
+                    <div class="forward-modal__summary">{{ forwardingMessageIds.length > 1 ? '选择聊天后继续选择逐条转发或合并转发' : '选择一个聊天目标后会继续发送这条消息' }}</div>
                     <a-input v-model:value="forwardSearchKeyword" allow-clear placeholder="搜索会话 / 好友 / 群组" class="forward-modal__search" />
                 </div>
                 <div v-if="recentForwardTargets.length" class="forward-modal__section">
@@ -246,6 +246,20 @@
             </div>
         </a-modal>
 
+        <a-modal v-model:open="forwardModeModalOpen" title="选择转发方式" :footer="null" :width="420">
+            <div class="forward-mode-modal">
+                <div class="forward-mode-modal__summary">将 {{ buildForwardMessageSummary() }} 发送给 {{ pendingForwardTarget?.name || '目标会话' }}</div>
+                <button type="button" class="forward-mode-modal__action" :disabled="forwarding" @click="handleConfirmForwardMode('separate')">
+                    <span class="forward-mode-modal__title">逐条转发</span>
+                    <span class="forward-mode-modal__desc">每条消息都以当前用户身份单独发送，不显示“转发自”</span>
+                </button>
+                <button type="button" class="forward-mode-modal__action" :disabled="forwarding" @click="handleConfirmForwardMode('merged')">
+                    <span class="forward-mode-modal__title">合并转发</span>
+                    <span class="forward-mode-modal__desc">把这批消息打包成一条聊天记录消息发送</span>
+                </button>
+            </div>
+        </a-modal>
+
         <a-modal v-model:open="groupInvitationModalOpen" title="群聊邀请" :footer="null" :width="CHAT_MODAL_WIDTH_LG">
             <div v-if="activeGroupInvitation" class="group-invitation-modal">
                 <div class="group-invitation-modal__summary">
@@ -271,6 +285,24 @@
                     </a-button>
                 </div>
             </div>
+        </a-modal>
+
+        <a-modal
+            v-for="viewer in chatRecordViewerStack"
+            :key="viewer.id"
+            v-model:open="viewer.open"
+            :title="viewer.record.title || '聊天记录'"
+            :footer="null"
+            :width="760"
+            @cancel="closeChatRecordViewer(viewer.id)"
+            @afterClose="removeChatRecordViewer(viewer.id)"
+        >
+            <ChatRecordViewer
+                :record="viewer.record"
+                @open-record="openChatRecordViewer"
+                @copy-entry="handleCopyChatRecordEntry"
+                @forward-entry="handleForwardChatRecordEntry"
+            />
         </a-modal>
 
         <a-drawer v-model:open="groupDrawerOpen" :title="settingsDrawerTitle" :width="CHAT_DRAWER_WIDTH" :body-style="drawerBodyStyle">
@@ -506,12 +538,14 @@ import { useRouter } from 'vue-router'
 import { applyGroupInvitationApi, forwardMessagesApi, openDirectConversationApi } from '@/api/chat'
 import AvatarCropModal from '@/components/AvatarCropModal.vue'
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
+import ChatRecordCard from '@/views/Chat/components/ChatRecordCard.vue'
+import ChatRecordViewer from '@/views/Chat/components/ChatRecordViewer.vue'
 import RichMessageComposer from '@/views/Chat/components/RichMessageComposer.vue'
 import type { RichMessageComposerExpose } from '@/views/Chat/components/RichMessageComposer.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
-import type { ChatComposerAttachmentToken, ChatComposerSegment, ChatConversationItem, ChatConversationMemberItem, ChatFriendshipItem, ChatGroupInvitationPayload, ChatMessageAssetPayload, ChatMessageForwardedPayload, ChatMessageItem, ChatMessageReplyPayload } from '@/types/chat'
+import type { ChatComposerAttachmentToken, ChatComposerSegment, ChatConversationItem, ChatConversationMemberItem, ChatFriendshipItem, ChatGroupInvitationPayload, ChatMessageAssetPayload, ChatMessageForwardedPayload, ChatMessageItem, ChatMessageRecordItem, ChatMessageRecordPayload, ChatMessageReplyPayload } from '@/types/chat'
 import { buildAttachmentSendPayloadFromEntry, buildAttachmentSendPayloadFromUploadResult } from '@/utils/chatAttachment'
 import { uploadFileWithCategory } from '@/utils/fileUploader'
 import { formatFileSize } from '@/utils/fileFormatter'
@@ -576,16 +610,20 @@ const selectedMessageIds = ref<number[]>([])
 const quotedMessage = ref<ChatMessageItem | null>(null)
 const composerResizeState = ref<{ startY: number; composerHeight: number } | null>(null)
 const forwardModalOpen = ref(false)
+const forwardModeModalOpen = ref(false)
 const forwardSearchKeyword = ref('')
 const selectedForwardTargetKey = ref('')
 const forwarding = ref(false)
 const forwardingMessageIds = ref<number[]>([])
+const pendingForwardTarget = ref<ForwardTargetOption | null>(null)
+const chatRecordViewerStack = ref<ChatRecordViewerItem[]>([])
 const groupInvitationModalOpen = ref(false)
 const activeInvitationMessage = ref<ChatMessageItem | null>(null)
 const groupInvitationApplying = ref(false)
 let avatarTempObjectUrl = ''
 let memberSearchTimer: number | null = null
 let inviteSearchTimer: number | null = null
+let chatRecordViewerSeed = 0
 
 const COMPOSER_MIN_HEIGHT = 176
 const COMPOSER_MAX_HEIGHT = 320
@@ -633,6 +671,12 @@ type ForwardTargetOption = {
     description: string
     searchText: string
     sortTime: string
+}
+
+type ChatRecordViewerItem = {
+    id: number
+    open: boolean
+    record: ChatMessageRecordPayload
 }
 
 const recentForwardTargetKeys = ref<string[]>([])
@@ -728,7 +772,7 @@ const groupNicknamePreview = computed(() => trimText(groupNicknameInput.value) |
 const sendShortcutLabel = computed(() => (settingsStore.chatSendHotkey === 'enter' ? 'Enter' : 'Ctrl + Enter'))
 const composerPlaceholder = computed(() => composerBlockedReason.value || `输入文本消息，按 ${sendShortcutLabel.value} 发送`)
 const messageMenuStyle = computed(() => ({ left: `${messageMenuPosition.value.x}px`, top: `${messageMenuPosition.value.y}px` }))
-const chatMainStyle = computed(() => ({ gridTemplateRows: `auto auto minmax(220px, 1fr) 8px ${settingsStore.chatLayout.composerHeight}px` }))
+const chatMainStyle = computed(() => ({ gridTemplateRows: `auto minmax(220px, 1fr) 8px ${settingsStore.chatLayout.composerHeight}px` }))
 const muteDurationOptions = [
     { minutes: 10, label: '禁言 10 分钟' },
     { minutes: 30, label: '禁言 30 分钟' },
@@ -813,6 +857,25 @@ const buildForwardMessageSummary = () => {
     return `“${preview.length > 22 ? `${preview.slice(0, 22)}...` : preview || '这条消息'}”`
 }
 
+const buildChatRecordPlainText = (record: ChatMessageRecordPayload | null) => {
+    if (!record) {
+        return '聊天记录'
+    }
+    const lines = (record.items || []).map((entry) => {
+        if (entry.message_type === 'image') {
+            return `${entry.sender_name}: [图片]`
+        }
+        if (entry.message_type === 'file') {
+            return `${entry.sender_name}: [文件]`
+        }
+        if (entry.message_type === 'chat_record') {
+            return `${entry.sender_name}: [聊天记录]`
+        }
+        return `${entry.sender_name}: ${trimText((entry.content || '').replace(/\s+/g, ' ')) || '空消息'}`
+    })
+    return [record.title || '聊天记录', ...lines].join('\n')
+}
+
 const resolveForwardTargetConversationId = async (target: ForwardTargetOption) => {
     if (target.conversationId) {
         return target.conversationId
@@ -850,6 +913,31 @@ const confirmForwardSelection = (target: ForwardTargetOption) => {
     })
 }
 
+const submitForward = async (target: ForwardTargetOption, forwardMode: 'separate' | 'merged') => {
+    forwarding.value = true
+    forwardModalOpen.value = false
+    forwardModeModalOpen.value = false
+    try {
+        const targetConversationId = await resolveForwardTargetConversationId(target)
+        await forwardMessagesApi({
+            target_conversation_id: targetConversationId,
+            message_ids: forwardingMessageIds.value,
+            forward_mode: forwardMode,
+        })
+        persistRecentForwardTarget(target.key)
+        selectedForwardTargetKey.value = ''
+        forwardingMessageIds.value = []
+        pendingForwardTarget.value = null
+        clearMessageSelection()
+        closeMessageMenu()
+        message.success('转发成功')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '转发失败'))
+    } finally {
+        forwarding.value = false
+    }
+}
+
 const openForwardModal = async () => {
     try {
         await Promise.all([chatStore.loadConversations(), chatStore.loadFriends()])
@@ -867,29 +955,23 @@ const handleSelectForwardTarget = async (target: ForwardTargetOption) => {
         return
     }
     selectedForwardTargetKey.value = target.key
+    if (forwardingMessageIds.value.length > 1) {
+        pendingForwardTarget.value = target
+        forwardModeModalOpen.value = true
+        return
+    }
     const confirmed = await confirmForwardSelection(target)
     if (!confirmed) {
         return
     }
-    forwarding.value = true
-    forwardModalOpen.value = false
-    try {
-        const targetConversationId = await resolveForwardTargetConversationId(target)
-        await forwardMessagesApi({
-            target_conversation_id: targetConversationId,
-            message_ids: forwardingMessageIds.value,
-        })
-        persistRecentForwardTarget(target.key)
-        selectedForwardTargetKey.value = ''
-        forwardingMessageIds.value = []
-        clearMessageSelection()
-        closeMessageMenu()
-        message.success('转发成功')
-    } catch (error: unknown) {
-        message.error(getErrorMessage(error, '转发失败'))
-    } finally {
-        forwarding.value = false
+    await submitForward(target, 'separate')
+}
+
+const handleConfirmForwardMode = (forwardMode: 'separate' | 'merged') => {
+    if (!pendingForwardTarget.value || forwarding.value) {
+        return
     }
+    void submitForward(pendingForwardTarget.value, forwardMode)
 }
 
 const buildForwardConversationTarget = (conversation: ChatConversationItem): ForwardTargetOption => ({
@@ -1013,7 +1095,19 @@ const getAssetMessagePayload = (messageItem: ChatMessageItem): ChatMessageAssetP
     return payload as ChatMessageAssetPayload
 }
 
+const getChatRecordPayload = (messageItem: ChatMessageItem): ChatMessageRecordPayload | null => {
+    if (messageItem.message_type !== 'chat_record') {
+        return null
+    }
+    const payload = messageItem.payload as { chat_record?: ChatMessageRecordPayload }
+    if (!payload?.chat_record || !Array.isArray(payload.chat_record.items)) {
+        return null
+    }
+    return payload.chat_record
+}
+
 const isAssetMessage = (messageItem: ChatMessageItem) => Boolean(getAssetMessagePayload(messageItem))
+const isChatRecordMessage = (messageItem: ChatMessageItem) => Boolean(getChatRecordPayload(messageItem))
 
 const getAssetDisplayName = (messageItem: ChatMessageItem) => getAssetMessagePayload(messageItem)?.display_name || messageItem.content || '附件'
 
@@ -1106,10 +1200,38 @@ const buildAttachmentClipboardHtml = (messageItem: ChatMessageItem) => {
 
 const hasAssetUrl = (messageItem: ChatMessageItem) => Boolean(getAssetMessagePayload(messageItem)?.url)
 
-const hasMessageBubbleAction = (messageItem: ChatMessageItem) => Boolean(getGroupInvitationPayload(messageItem) || hasAssetUrl(messageItem))
+const hasMessageBubbleAction = (messageItem: ChatMessageItem) => Boolean(getGroupInvitationPayload(messageItem) || hasAssetUrl(messageItem) || isChatRecordMessage(messageItem))
+
+const isPreviewableAssetMessage = (messageItem: ChatMessageItem) => {
+    if (messageItem.message_type === 'image') {
+        return true
+    }
+    const payload = getAssetMessagePayload(messageItem)
+    const mediaType = String(payload?.media_type || '').trim().toLowerCase()
+    const mimeType = String(payload?.mime_type || '').trim().toLowerCase()
+    return mediaType === 'video' || mediaType === 'audio' || mimeType.startsWith('video/') || mimeType.startsWith('audio/')
+}
+
+const triggerAssetDownload = (messageItem: ChatMessageItem) => {
+    const url = getAssetMessagePayload(messageItem)?.url || ''
+    if (!url) {
+        return
+    }
+    const link = document.createElement('a')
+    link.href = url
+    link.download = getAssetDisplayName(messageItem)
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+}
 
 const openAssetMessage = (messageItem: ChatMessageItem) => {
     if (!hasAssetUrl(messageItem)) {
+        return
+    }
+    if (!isPreviewableAssetMessage(messageItem)) {
+        triggerAssetDownload(messageItem)
         return
     }
     window.open(getAssetMessagePayload(messageItem)?.url, '_blank', 'noopener,noreferrer')
@@ -1128,7 +1250,32 @@ const handleMessageBubbleClick = (messageItem: ChatMessageItem) => {
         openGroupInvitationModal(messageItem)
         return
     }
+    if (isChatRecordMessage(messageItem)) {
+        openChatRecordViewerFromMessage(messageItem)
+        return
+    }
     openAssetMessage(messageItem)
+}
+
+const openChatRecordViewer = (record: ChatMessageRecordPayload) => {
+    chatRecordViewerSeed += 1
+    chatRecordViewerStack.value = [...chatRecordViewerStack.value, { id: chatRecordViewerSeed, open: true, record }]
+}
+
+const openChatRecordViewerFromMessage = (messageItem: ChatMessageItem) => {
+    const record = getChatRecordPayload(messageItem)
+    if (!record) {
+        return
+    }
+    openChatRecordViewer(record)
+}
+
+const closeChatRecordViewer = (viewerId: number) => {
+    chatRecordViewerStack.value = chatRecordViewerStack.value.map((viewer) => (viewer.id === viewerId ? { ...viewer, open: false } : viewer))
+}
+
+const removeChatRecordViewer = (viewerId: number) => {
+    chatRecordViewerStack.value = chatRecordViewerStack.value.filter((viewer) => viewer.id !== viewerId)
 }
 
 const isMessageSelected = (messageId: number) => selectedMessageIds.value.includes(messageId)
@@ -1154,10 +1301,44 @@ const clearMessageSelection = () => {
 }
 
 const getMessageQuotePreview = (messageItem: ChatMessageItem) => {
+    if (isChatRecordMessage(messageItem)) {
+        return `[聊天记录] ${getChatRecordPayload(messageItem)?.title || '聊天记录'}`
+    }
     if (isAssetMessage(messageItem)) {
         return `[附件] ${getAssetDisplayName(messageItem)}`
     }
     return trimText(messageItem.content) || '空消息'
+}
+
+const buildChatRecordEntryCopyText = (entry: ChatMessageRecordItem) => {
+    if (entry.message_type === 'chat_record') {
+        return buildChatRecordPlainText(entry.chat_record || null)
+    }
+    if (entry.message_type === 'image') {
+        return [entry.asset?.display_name || '[图片]', entry.asset?.url || ''].filter(Boolean).join('\n')
+    }
+    if (entry.message_type === 'file') {
+        return [entry.asset?.display_name || '[文件]', entry.asset?.url || ''].filter(Boolean).join('\n')
+    }
+    return entry.content || '空消息'
+}
+
+const handleCopyChatRecordEntry = async (entry: ChatMessageRecordItem) => {
+    try {
+        await navigator.clipboard.writeText(buildChatRecordEntryCopyText(entry))
+        message.success('消息已复制')
+    } catch {
+        message.error('复制失败')
+    }
+}
+
+const handleForwardChatRecordEntry = (entry: ChatMessageRecordItem) => {
+    if (!entry.source_message_id) {
+        message.warning('该条聊天记录暂不支持转发')
+        return
+    }
+    forwardingMessageIds.value = [entry.source_message_id]
+    void openForwardModal()
 }
 
 const closeMessageMenu = () => {
@@ -1910,6 +2091,12 @@ const handleCopyMessage = async () => {
             closeMessageMenu()
             return
         }
+        if (isChatRecordMessage(messageMenuMessage.value)) {
+            await navigator.clipboard.writeText(buildChatRecordPlainText(getChatRecordPayload(messageMenuMessage.value)))
+            message.success('聊天记录已复制')
+            closeMessageMenu()
+            return
+        }
         const content = isAssetMessage(messageMenuMessage.value)
             ? [getAssetDisplayName(messageMenuMessage.value), getAssetMessagePayload(messageMenuMessage.value)?.url || ''].filter(Boolean).join('\n')
             : messageMenuMessage.value.content
@@ -2022,9 +2209,12 @@ watch(
         clearMessageSelection()
         quotedMessage.value = null
         forwardModalOpen.value = false
+        forwardModeModalOpen.value = false
         forwardingMessageIds.value = []
+        pendingForwardTarget.value = null
         forwardSearchKeyword.value = ''
         selectedForwardTargetKey.value = ''
+        chatRecordViewerStack.value = []
         memberModalOpen.value = false
         inviteModalOpen.value = false
         memberSearchKeyword.value = ''
@@ -2133,7 +2323,6 @@ function escapeHtml(value: string) {
 }
 
 .chat-main__header,
-.chat-main__history-toolbar,
 .chat-main__composer {
     padding: 12px 16px;
 }
@@ -2206,15 +2395,6 @@ function escapeHtml(value: string) {
     border-radius: 10px;
 }
 
-.chat-main__history-toolbar {
-    padding-top: 8px;
-    padding-bottom: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-}
-
 .chat-main__messages,
 .drawer-list {
     overflow: auto;
@@ -2225,11 +2405,16 @@ function escapeHtml(value: string) {
 }
 
 .chat-main__messages {
+    position: relative;
     padding: 14px 18px;
     display: flex;
     flex-direction: column;
     gap: 16px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--chat-subtle-bg) 90%, transparent), var(--chat-panel-bg-strong));
+}
+
+.chat-main__load-more {
+    align-self: flex-start;
 }
 
 .message-row {
@@ -2309,13 +2494,13 @@ function escapeHtml(value: string) {
 .message-row__select.is-checked .message-row__select-indicator::after {
     content: '';
     position: absolute;
-    left: 5px;
-    top: 2px;
-    width: 4px;
-    height: 8px;
+    left: 50%;
+    top: 50%;
+    width: 5px;
+    height: 9px;
     border-right: 2px solid #fff;
     border-bottom: 2px solid #fff;
-    transform: rotate(45deg);
+    transform: translate(-50%, -58%) rotate(45deg);
 }
 
 .message-bubble-wrap {
@@ -2622,7 +2807,7 @@ function escapeHtml(value: string) {
 
 .chat-main__composer-resizer {
     position: relative;
-    height: 1px;
+    height: 2px;
     margin-top: 8px;
     background: color-mix(in srgb, var(--chat-panel-border) 88%, transparent);
     cursor: row-resize;
@@ -2638,6 +2823,10 @@ function escapeHtml(value: string) {
 }
 
 .chat-main__selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    align-self: stretch;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2647,6 +2836,8 @@ function escapeHtml(value: string) {
     border: 1px solid var(--chat-panel-border);
     border-radius: 12px;
     background: color-mix(in srgb, var(--chat-accent-soft) 76%, var(--chat-panel-bg-strong));
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(8px);
     color: var(--chat-text-primary);
 }
 
@@ -3175,6 +3366,55 @@ function escapeHtml(value: string) {
     flex-direction: column;
     gap: 4px;
     min-width: 0;
+}
+
+.forward-mode-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.forward-mode-modal__summary {
+    font-size: 13px;
+    color: var(--chat-text-secondary);
+}
+
+.forward-mode-modal__action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--chat-panel-border);
+    border-radius: 14px;
+    background: var(--chat-panel-bg-strong);
+    color: var(--chat-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.forward-mode-modal__action:hover {
+    border-color: color-mix(in srgb, var(--chat-accent) 54%, white);
+    background: color-mix(in srgb, var(--chat-accent-soft) 72%, var(--chat-panel-bg-strong));
+    transform: translateY(-1px);
+}
+
+.forward-mode-modal__action:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+    transform: none;
+}
+
+.forward-mode-modal__title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.forward-mode-modal__desc {
+    font-size: 12px;
+    color: var(--chat-text-secondary);
 }
 
 .entity-modal {

@@ -2,7 +2,7 @@ import type { ListResult } from '@/types/user'
 
 export type ChatConversationType = 'direct' | 'group'
 export type ChatAccessMode = 'member' | 'stealth_readonly'
-export type ChatMessageType = 'text' | 'system' | 'image' | 'file'
+export type ChatMessageType = 'text' | 'system' | 'image' | 'file' | 'chat_record'
 export type ChatMemberRole = 'owner' | 'admin' | 'member'
 export type ChatRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'expired'
 export type ChatJoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'canceled'
@@ -89,6 +89,25 @@ export interface ChatMessageForwardedPayload {
     message_type: ChatMessageType
     sender_name: string
     content_preview: string
+}
+
+export interface ChatMessageRecordItem {
+    source_message_id: number
+    sequence: number
+    conversation_id: number
+    message_type: ChatMessageType
+    sender_name: string
+    sender_avatar: string
+    content: string
+    asset?: ChatMessageAssetPayload
+    chat_record?: ChatMessageRecordPayload
+}
+
+export interface ChatMessageRecordPayload {
+    version: number
+    title: string
+    footer_label: string
+    items: ChatMessageRecordItem[]
 }
 
 export interface ChatGroupInvitationPayload {

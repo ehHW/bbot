@@ -45,8 +45,8 @@ export const sendConversationAttachmentApi = (conversationId: number, asset_refe
     }>(`chat/conversations/${conversationId}/attachments/`, { asset_reference_id })
 }
 
-export const forwardMessagesApi = (payload: { target_conversation_id: number; message_ids: number[] }) => {
-    return instance.post<{ detail: string; target_conversation_id: number; forwarded_count: number }>('chat/messages/forward/', payload)
+export const forwardMessagesApi = (payload: { target_conversation_id: number; message_ids: number[]; forward_mode?: 'separate' | 'merged' }) => {
+    return instance.post<{ detail: string; target_conversation_id: number; forwarded_count: number; forward_mode: 'separate' | 'merged' }>('chat/messages/forward/', payload)
 }
 
 export const updateGroupConfigApi = (

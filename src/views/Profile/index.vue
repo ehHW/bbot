@@ -17,21 +17,25 @@
                     </a-form-item>
                     <a-form-item label="头像">
                         <div class="avatar-panel">
-                            <div class="avatar-preview">
+                            <button type="button" class="avatar-preview avatar-preview--button" @click="openAvatarPicker">
                                 <a-avatar :size="180" :src="formState.avatar || undefined">
                                     {{ avatarText }}
                                 </a-avatar>
-                            </div>
-                            <div class="avatar-panel__action">
-                                <a-upload :before-upload="handleAvatarUpload" :show-upload-list="false" accept="image/*">
-                                    <a-button :loading="avatarUploading">上传头像</a-button>
-                                </a-upload>
-                            </div>
+                            </button>
+                            <input
+                                ref="avatarInputRef"
+                                type="file"
+                                accept="image/*"
+                                class="avatar-input"
+                                hidden
+                                tabindex="-1"
+                                aria-hidden="true"
+                                @change="handleAvatarInputChange"
+                            />
                         </div>
                     </a-form-item>
                     <a-space>
                         <a-button type="primary" :loading="saving" @click="submitProfile">保存资料</a-button>
-                        <a-button @click="fillFormFromUser">重置</a-button>
                     </a-space>
                 </a-form>
             </a-col>
@@ -48,6 +52,23 @@
                         {{ formatDateTime(userStore.user?.updated_at || '') }}
                     </a-descriptions-item>
                 </a-descriptions>
+
+                <a-card size="small" class="profile-password-card" title="修改密码">
+                    <a-form layout="vertical">
+                        <a-form-item label="当前密码">
+                            <a-input-password v-model:value="passwordState.current_password" placeholder="请输入当前密码" />
+                        </a-form-item>
+                        <a-form-item label="新密码">
+                            <a-input-password v-model:value="passwordState.new_password" placeholder="请输入新密码" />
+                        </a-form-item>
+                        <a-form-item label="确认新密码">
+                            <a-input-password v-model:value="passwordState.confirm_password" placeholder="请再次输入新密码" />
+                        </a-form-item>
+                        <a-button type="primary" block :loading="passwordSaving" @click="submitPasswordChange">
+                            更新密码
+                        </a-button>
+                    </a-form>
+                </a-card>
             </a-col>
         </a-row>
     </a-card>
@@ -64,9 +85,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import type { UploadProps } from 'ant-design-vue'
 import AvatarCropModal from '@/components/AvatarCropModal.vue'
-import { updateProfileApi } from '@/api/user'
+import { changePasswordApi, updateProfileApi } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { getErrorMessage } from '@/utils/error'
@@ -77,9 +97,11 @@ import { isValidEmail, isValidPhoneNumber, trimText, validateAvatarFile } from '
 const authStore = useAuthStore()
 const userStore = useUserStore()
 const saving = ref(false)
+const passwordSaving = ref(false)
 const avatarUploading = ref(false)
 const avatarCropOpen = ref(false)
 const avatarCropImageUrl = ref('')
+const avatarInputRef = ref<HTMLInputElement | null>(null)
 let avatarTempObjectUrl = ''
 
 const formState = reactive({
@@ -87,6 +109,12 @@ const formState = reactive({
     email: '',
     phone_number: '',
     avatar: '',
+})
+
+const passwordState = reactive({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
 })
 
 const roleNames = computed(() => userStore.user?.roles.map((item) => item.name).join('、') || '-')
@@ -99,11 +127,17 @@ const fillFormFromUser = () => {
     formState.avatar = userStore.user?.avatar || ''
 }
 
-const handleAvatarUpload: UploadProps['beforeUpload'] = async (file) => {
-    const warning = validateAvatarFile(file as File)
+const resetPasswordForm = () => {
+    passwordState.current_password = ''
+    passwordState.new_password = ''
+    passwordState.confirm_password = ''
+}
+
+const prepareAvatarCrop = (file: File) => {
+    const warning = validateAvatarFile(file)
     if (warning) {
         message.warning(warning)
-        return false
+        return
     }
 
     if (avatarTempObjectUrl) {
@@ -114,8 +148,19 @@ const handleAvatarUpload: UploadProps['beforeUpload'] = async (file) => {
     avatarTempObjectUrl = URL.createObjectURL(file as File)
     avatarCropImageUrl.value = avatarTempObjectUrl
     avatarCropOpen.value = true
+}
 
-    return false
+const openAvatarPicker = () => {
+    avatarInputRef.value?.click()
+}
+
+const handleAvatarInputChange = (event: Event) => {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (file) {
+        prepareAvatarCrop(file)
+    }
+    input.value = ''
 }
 
 const clearCropState = () => {
@@ -188,6 +233,32 @@ const submitProfile = async () => {
     }
 }
 
+const submitPasswordChange = async () => {
+    if (!passwordState.current_password || !passwordState.new_password || !passwordState.confirm_password) {
+        message.warning('请完整填写密码信息')
+        return
+    }
+    if (passwordState.new_password !== passwordState.confirm_password) {
+        message.warning('两次输入的新密码不一致')
+        return
+    }
+
+    passwordSaving.value = true
+    try {
+        const { data } = await changePasswordApi({
+            current_password: passwordState.current_password,
+            new_password: passwordState.new_password,
+            confirm_password: passwordState.confirm_password,
+        })
+        resetPasswordForm()
+        message.success(data.detail || '密码修改成功')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '密码修改失败'))
+    } finally {
+        passwordSaving.value = false
+    }
+}
+
 onMounted(fillFormFromUser)
 
 onBeforeUnmount(() => {
@@ -219,6 +290,17 @@ onBeforeUnmount(() => {
     align-items: center;
 }
 
+.avatar-preview--button {
+    padding: 0;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.avatar-preview--button:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-1px);
+}
+
 .avatar-panel {
     width: 180px;
     display: flex;
@@ -227,10 +309,12 @@ onBeforeUnmount(() => {
     gap: 12px;
 }
 
-.avatar-panel__action {
-    display: flex;
-    justify-content: center;
-    width: 100%;
+.avatar-input {
+    display: none;
+}
+
+.profile-password-card {
+    margin-top: 16px;
 }
 
 :deep(.avatar-preview .ant-avatar) {

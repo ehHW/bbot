@@ -36,7 +36,7 @@
             <div class="preview-panel">
                 <div class="preview-card">
                     <div class="preview-card__title">裁剪预览</div>
-                    <div class="img-preview radian" :style="previewStyle" v-html="previewHtml || previewFallbackHtml"></div>
+                    <div class="img-preview radian" v-html="previewHtml || previewFallbackHtml"></div>
                 </div>
                 <div class="preview-tip">拖动图片并缩放，选择头像显示区域</div>
             </div>
@@ -75,7 +75,6 @@ type RealTimePreviewData = {
 
 const cropperRef = ref<CropperExpose | null>(null)
 const previewHtml = ref('')
-const previewDiameter = 180
 const baseScale = ref<number | null>(null)
 const maxZoomRatio = 3
 const modalBodyStyle = {
@@ -94,14 +93,6 @@ const option = reactive({
     full: true,
     autoCropWidth: 280,
     autoCropHeight: 280,
-})
-
-const previewStyle = computed(() => {
-    const cropDiameter = Math.max(1, Math.min(option.autoCropWidth, option.autoCropHeight))
-    const scale = Math.min(1, previewDiameter / cropDiameter)
-    return {
-        '--preview-scale': String(scale),
-    }
 })
 
 const previewFallbackHtml = computed(() => '<div class="preview-empty">预览区</div>')
@@ -278,8 +269,8 @@ const handleConfirm = async () => {
 :deep(.img-preview .show-preview > div),
 :deep(.img-preview .show-preview img),
 :deep(.img-preview .show-preview canvas) {
-    transform: scale(var(--preview-scale, 1));
-    transform-origin: center center;
+    max-width: none !important;
+    max-height: none !important;
 }
 
 :deep(.preview-empty) {

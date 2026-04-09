@@ -6,17 +6,13 @@
         </div>
 
         <div class="contact-shortcuts">
-            <button type="button" class="contact-shortcut" :class="{ active: route.name === 'ChatContactsRequests' }" @click="router.push({ name: 'ChatContactsRequests' })">
-                <span>新朋友</span>
-                <a-badge :count="pendingFriendRequestCount" :overflow-count="99" />
+            <button type="button" class="contact-shortcut" :class="{ active: route.name === 'ChatContactsFriendNotices' }" @click="router.push({ name: 'ChatContactsFriendNotices' })">
+                <span>好友通知</span>
+                <a-badge :count="friendNoticeShortcutCount" :overflow-count="99" />
             </button>
             <button type="button" class="contact-shortcut" :class="{ active: route.name === 'ChatContactsNotices' }" @click="router.push({ name: 'ChatContactsNotices' })">
                 <span>群通知</span>
                 <a-badge :count="groupNoticeCount" :overflow-count="99" />
-            </button>
-            <button type="button" class="contact-shortcut" :class="{ active: route.name === 'ChatContactsFriendNotices' }" @click="router.push({ name: 'ChatContactsFriendNotices' })">
-                <span>好友通知</span>
-                <a-badge :count="chatStore.unreadFriendNoticeCount" :overflow-count="99" />
             </button>
         </div>
 
@@ -121,6 +117,7 @@ const pendingFriendRequestCount = computed(
     () => chatStore.unreadPendingFriendRequestCount,
 )
 const groupNoticeCount = computed(() => chatStore.globalGroupJoinRequests.length + chatStore.groupNoticeItems.length)
+const friendNoticeShortcutCount = computed(() => pendingFriendRequestCount.value + chatStore.unreadFriendNoticeCount)
 
 const filteredFriends = computed(() => {
     const keyword = contactKeyword.value.trim().toLowerCase()

@@ -112,12 +112,9 @@ export const routes: RouteRecordRaw[] = [
                     {
                         path: 'contacts/requests',
                         name: 'ChatContactsRequests',
-                        components: {
-                            default: () => import('@/views/Chat/components/ContactRequestsWorkspace.vue'),
-                            list: () => import('@/views/Chat/components/ContactListPanel.vue'),
-                        },
+                        redirect: { name: 'ChatContactsFriendNotices' },
                         meta: {
-                            title: '新朋友',
+                            title: '好友通知',
                             requiresAuth: true,
                             disableProgress: true,
                         },

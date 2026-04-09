@@ -1,6 +1,6 @@
 <template>
     <section class="chat-workspace">
-        <a-empty description="从左侧选择好友，或打开新朋友 / 群通知" />
+        <a-empty description="从左侧选择好友，或打开好友通知 / 群通知" />
     </section>
 </template>
 
