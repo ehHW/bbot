@@ -37,6 +37,7 @@ describe('chatAttachment', () => {
                 width: null,
                 height: null,
                 duration_seconds: null,
+                extra_metadata: {},
                 url: '/uploads/users/demo/季度复盘.pdf',
             },
         })
@@ -48,6 +49,8 @@ describe('chatAttachment', () => {
             mimeType: 'application/pdf',
             fileSize: 4096,
             url: '/uploads/users/demo/季度复盘.pdf',
+            streamUrl: '',
+            thumbnailUrl: '',
         })
     })
 
@@ -92,6 +95,7 @@ describe('chatAttachment', () => {
                         width: null,
                         height: null,
                         duration_seconds: null,
+                        extra_metadata: {},
                         url: '/uploads/users/demo/架构图.png',
                     },
                 },
@@ -110,6 +114,9 @@ describe('chatAttachment', () => {
             mimeType: 'image/png',
             fileSize: 2048,
             url: '/uploads/users/demo/架构图.png',
+            streamUrl: '',
+            thumbnailUrl: '',
+            processingStatus: '',
         })
     })
 })

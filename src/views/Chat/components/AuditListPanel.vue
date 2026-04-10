@@ -11,14 +11,14 @@
         <a-input v-model:value="auditKeyword" allow-clear placeholder="搜索会话名或消息内容" @press-enter="handleLoadAudit" />
 
         <div class="chat-panel__list">
-            <div v-for="conversation in chatStore.adminConversations" :key="`audit-conversation-${conversation.id}`" class="drawer-list-item">
+            <div v-for="conversation in chatAudit.adminConversations" :key="`audit-conversation-${conversation.id}`" class="drawer-list-item">
                 <div>
                     <div class="drawer-list-title">{{ conversation.name }}</div>
                     <div class="drawer-list-desc">{{ conversation.type === 'group' ? '群聊' : '单聊' }} · {{ conversation.last_message_preview || '暂无消息' }}</div>
                 </div>
                 <a-button size="small" @click="openConversation(conversation.id)">查看</a-button>
             </div>
-            <a-empty v-if="!chatStore.adminConversations.length" description="暂无会话" />
+            <a-empty v-if="!chatAudit.adminConversations.length" description="暂无会话" />
         </div>
     </section>
 </template>
@@ -32,18 +32,20 @@ import { getErrorMessage } from '@/utils/error'
 
 const router = useRouter()
 const { chatStore } = useChatShell()
+const chatAudit = chatStore.audit
+const chatConversation = chatStore.conversation
 const auditKeyword = ref('')
 
 const handleLoadAudit = async () => {
     try {
-        await chatStore.loadAuditData(auditKeyword.value.trim())
+        await chatAudit.loadAuditData(auditKeyword.value.trim())
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载巡检数据失败'))
     }
 }
 
 const openConversation = async (conversationId: number) => {
-    await chatStore.selectConversation(conversationId)
+    await chatConversation.selectConversation(conversationId)
     await router.push({ name: 'ChatMessages' })
 }
 

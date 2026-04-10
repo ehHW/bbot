@@ -47,6 +47,7 @@ type ChatRealtimeHandlerOptions = {
     getCurrentUserId: () => number | undefined
     typingMap: Record<number, ChatUserBrief[]>
     typingTimers: Map<string, TypingTimer>
+    appendFriendNotice: (notice: { id: string; title: string; description: string; created_at: string; payload: Record<string, unknown> }) => void
     appendGroupNotice: (notice: { id: string; conversation_id: number | null; message: string; created_at: string; payload: Record<string, unknown> }) => void
     clearSendingState: () => void
     loadConversations: () => Promise<void>
@@ -64,14 +65,41 @@ type ChatRealtimeHandlerOptions = {
     upsertMessage: (conversationId: number, nextMessage: ChatMessageItem) => void
 }
 
+function resolveRealtimeErrorFeedback(payload: WebSocketMessage): { toastMessage: string; failedStateError: string } {
+    const rawMessage = typeof payload.message === 'string' ? payload.message.trim() : ''
+    if (payload.error_kind === 'schema') {
+        return {
+            toastMessage: '消息请求格式错误，请刷新后重试',
+            failedStateError: rawMessage || '请求格式错误，消息未发送',
+        }
+    }
+    if (payload.error_kind === 'permission') {
+        return {
+            toastMessage: rawMessage || '当前没有权限执行该操作',
+            failedStateError: rawMessage || '没有权限，消息未发送',
+        }
+    }
+    if (payload.error_kind === 'business') {
+        return {
+            toastMessage: rawMessage || '当前操作暂时无法完成',
+            failedStateError: rawMessage || '当前操作暂时无法完成',
+        }
+    }
+    return {
+        toastMessage: rawMessage || '聊天操作失败',
+        failedStateError: rawMessage || '发送失败',
+    }
+}
+
 export function createChatRealtimeHandler(options: ChatRealtimeHandlerOptions) {
     return async (payload: WebSocketMessage) => {
         if (!payload || typeof payload.type !== 'string') {
             return
         }
         if (payload.type === 'error') {
-            antMessage.error(String(payload.message || '聊天操作失败'))
-            options.markLatestSendingMessageFailed(options.activeConversationId.value, String(payload.message || '发送失败'))
+            const feedback = resolveRealtimeErrorFeedback(payload)
+            antMessage.error(feedback.toastMessage)
+            options.markLatestSendingMessageFailed(options.activeConversationId.value, feedback.failedStateError)
             options.clearSendingState()
             return
         }
@@ -101,6 +129,15 @@ export function createChatRealtimeHandler(options: ChatRealtimeHandlerOptions) {
                 if (options.activeConversationId.value === conversationId && document.visibilityState === 'visible') {
                     await options.markConversationRead(conversationId, nextMessage.sequence)
                 }
+            }
+            return
+        }
+        if (payload.type === 'chat_message_updated') {
+            const conversationId = Number(payload.conversation_id)
+            const nextMessage = payload.message as ChatMessageItem | undefined
+            if (conversationId && nextMessage) {
+                options.upsertMessage(conversationId, nextMessage)
+                options.syncConversationPreview(conversationId, nextMessage)
             }
             return
         }
@@ -152,11 +189,23 @@ export function createChatRealtimeHandler(options: ChatRealtimeHandlerOptions) {
         }
         if (payload.type === 'system_notice' && payload.category === 'chat' && payload.message) {
             const noticePayload = (payload.payload || {}) as Record<string, unknown>
+            const noticeType = String(noticePayload.notice_type || '')
+            if (noticeType.startsWith('friend_')) {
+                options.appendFriendNotice({
+                    id: String(noticePayload.notice_id || `${Date.now()}_${Math.random().toString(16).slice(2)}`),
+                    title: String(payload.message),
+                    description: String(noticePayload.description || ''),
+                    created_at: typeof payload.occurred_at === 'string' ? payload.occurred_at : new Date().toISOString(),
+                    payload: noticePayload,
+                })
+                antMessage.info(String(payload.message))
+                return
+            }
             options.appendGroupNotice({
                 id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
                 conversation_id: typeof noticePayload.conversation_id === 'number' ? noticePayload.conversation_id : null,
                 message: String(payload.message),
-                created_at: new Date().toISOString(),
+                created_at: typeof payload.occurred_at === 'string' ? payload.occurred_at : new Date().toISOString(),
                 payload: noticePayload,
             })
             antMessage.info(String(payload.message))

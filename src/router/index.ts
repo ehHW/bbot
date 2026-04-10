@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { startProgress, closeProgress } from '@/utils/nprogress'
 import { routes } from '@/router/routes'
 import { useAuthStore } from '@/stores/auth'
-import { useSettingsStore } from '@/stores/settings'
 import { useUserStore } from '@/stores/user'
 
 const router = createRouter({
@@ -17,7 +16,6 @@ router.beforeEach(async (to, from) => {
     }
     const authStore = useAuthStore()
     const userStore = useUserStore()
-    const settingsStore = useSettingsStore()
 
     if (to.path === '/login' && authStore.isLogin) {
         return '/home'
@@ -41,8 +39,8 @@ router.beforeEach(async (to, from) => {
         return '/home'
     }
 
-    if (to.matched.some((item) => item.meta?.requiresStealthInspect) && !settingsStore.chatStealthInspectEnabled) {
-        return '/chat-center/messages'
+    if (to.matched.some((item) => item.meta?.superuserOnly) && !userStore.isSuperuser) {
+        return '/home'
     }
 })
 

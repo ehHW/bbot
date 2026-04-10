@@ -146,21 +146,6 @@ export const routes: RouteRecordRaw[] = [
                         },
                     },
                     {
-                        path: 'audit',
-                        name: 'ChatAudit',
-                        components: {
-                            default: () => import('@/views/Chat/components/AuditWorkspace.vue'),
-                            list: () => import('@/views/Chat/components/AuditListPanel.vue'),
-                        },
-                        meta: {
-                            title: '聊天巡检',
-                            requiresAuth: true,
-                            requiresStealthInspect: true,
-                            disableProgress: true,
-                            permissionCode: 'chat.review_all_messages',
-                        },
-                    },
-                    {
                         path: 'settings/shortcuts',
                         name: 'ChatSettingsShortcuts',
                         components: {
@@ -171,6 +156,20 @@ export const routes: RouteRecordRaw[] = [
                             title: '聊天室设置',
                             requiresAuth: true,
                             disableProgress: true,
+                        },
+                    },
+                    {
+                        path: 'settings/inspect',
+                        name: 'ChatSettingsInspect',
+                        components: {
+                            default: () => import('@/views/Chat/components/ChatInspectSettingsWorkspace.vue'),
+                            list: () => import('@/views/Chat/components/ChatSettingsPanel.vue'),
+                        },
+                        meta: {
+                            title: '巡检模式',
+                            requiresAuth: true,
+                            disableProgress: true,
+                            superuserOnly: true,
                         },
                     },
                 ],

@@ -38,10 +38,10 @@
 
         <div class="chat-panel__list">
             <button
-                v-for="conversation in chatStore.conversations"
+                v-for="conversation in chatConversationState.conversations"
                 :key="conversation.id"
                 class="conversation-item"
-                :class="{ active: chatStore.activeConversationId === conversation.id, pinned: conversation.is_pinned }"
+                :class="{ active: chatConversationState.activeConversationId === conversation.id, pinned: conversation.is_pinned }"
                 type="button"
                 @click="openConversation(conversation.id)"
                 @contextmenu.prevent="openConversationMenu($event, conversation)"
@@ -60,7 +60,7 @@
                     </div>
                 </div>
             </button>
-            <a-empty v-if="!chatStore.conversations.length" description="暂无会话" />
+            <a-empty v-if="!chatConversationState.conversations.length" description="暂无会话" />
         </div>
 
         <transition name="context-menu-fade">
@@ -74,19 +74,19 @@
             <a-tabs v-model:activeKey="activeResultTab">
                 <a-tab-pane key="conversations" tab="会话">
                     <div class="drawer-list">
-                        <div v-for="conversation in chatStore.searchResult?.conversations || []" :key="`result-conversation-${conversation.id}`" class="drawer-list-item">
+                        <div v-for="conversation in chatAudit.searchResult?.conversations || []" :key="`result-conversation-${conversation.id}`" class="drawer-list-item">
                             <div class="drawer-list-item__content">
                                 <div class="drawer-list-title">{{ conversation.name }}</div>
                                 <div class="drawer-list-desc">{{ conversation.type === 'group' ? '群聊' : '私聊' }}</div>
                             </div>
                             <a-button size="small" @click="openConversation(conversation.id)">打开</a-button>
                         </div>
-                        <a-empty v-if="!(chatStore.searchResult?.conversations || []).length" description="暂无匹配会话" />
+                        <a-empty v-if="!(chatAudit.searchResult?.conversations || []).length" description="暂无匹配会话" />
                     </div>
                 </a-tab-pane>
                 <a-tab-pane key="users" tab="用户">
                     <div class="drawer-list">
-                        <div v-for="user in chatStore.searchResult?.users || []" :key="`result-user-${user.id}`" class="drawer-list-item">
+                        <div v-for="user in chatAudit.searchResult?.users || []" :key="`result-user-${user.id}`" class="drawer-list-item">
                             <div class="drawer-list-item__content">
                                 <div class="drawer-list-title">{{ user.display_name || user.username }}</div>
                                 <div class="drawer-list-desc">{{ user.username }}</div>
@@ -96,7 +96,7 @@
                                 <a-button size="small" type="primary" @click="handleSendFriendRequest(user.id)">加好友</a-button>
                             </a-space>
                         </div>
-                        <a-empty v-if="!(chatStore.searchResult?.users || []).length" description="暂无匹配用户" />
+                        <a-empty v-if="!(chatAudit.searchResult?.users || []).length" description="暂无匹配用户" />
                     </div>
                 </a-tab-pane>
                 <a-tab-pane key="groups" tab="群聊">
@@ -114,7 +114,7 @@
                 <a-tab-pane key="messages" tab="聊天记录">
                     <div class="drawer-list">
                         <button
-                            v-for="messageItem in chatStore.searchResult?.messages || []"
+                            v-for="messageItem in chatAudit.searchResult?.messages || []"
                             :key="`result-message-${messageItem.message_id}`"
                             type="button"
                             class="drawer-list-item search-message-card"
@@ -126,7 +126,7 @@
                             </div>
                             <div class="drawer-list-desc">{{ messageItem.content_preview }}</div>
                         </button>
-                        <a-empty v-if="!(chatStore.searchResult?.messages || []).length" description="暂无匹配聊天记录" />
+                        <a-empty v-if="!(chatAudit.searchResult?.messages || []).length" description="暂无匹配聊天记录" />
                     </div>
                 </a-tab-pane>
             </a-tabs>
@@ -204,6 +204,11 @@ type TopMatchItem = {
 const route = useRoute()
 const router = useRouter()
 const { avatarStyle, avatarText, chatStore, formatShortTime } = useChatShell()
+const chatConversationState = chatStore.state.conversationState
+const chatFriendshipState = chatStore.state.friendshipState
+const chatConversation = chatStore.conversation
+const chatFriendship = chatStore.friendship
+const chatAudit = chatStore.audit
 
 const searchKeyword = ref('')
 const friendRequestMessage = ref('')
@@ -242,15 +247,15 @@ const groupForm = reactive({
 })
 
 const friendOptions = computed(() =>
-    chatStore.friends.map((item) => ({
+    chatFriendshipState.friends.map((item) => ({
         label: `${item.friend_user.display_name || item.friend_user.username} (${item.friend_user.username})`,
         value: item.friend_user.id,
     })),
 )
 
-const friendIds = computed(() => new Set(chatStore.friends.map((item) => item.friend_user.id)))
+const friendIds = computed(() => new Set(chatFriendshipState.friends.map((item) => item.friend_user.id)))
 const topUserMatches = computed<TopMatchItem[]>(() => {
-    return (chatStore.searchResult?.users || []).map((item) => ({
+    return (chatAudit.searchResult?.users || []).map((item) => ({
         key: `user-${item.id}`,
         label: item.display_name || item.username,
         meta: friendIds.value.has(item.id) ? '好友' : '用户',
@@ -258,8 +263,8 @@ const topUserMatches = computed<TopMatchItem[]>(() => {
         id: item.id,
     })).slice(0, 3)
 })
-const recentMessageMatches = computed(() => (chatStore.searchResult?.messages || []).slice(0, 3))
-const matchedGroups = computed(() => (chatStore.searchResult?.conversations || []).filter((item) => item.type === 'group'))
+const recentMessageMatches = computed(() => (chatAudit.searchResult?.messages || []).slice(0, 3))
+const matchedGroups = computed(() => (chatAudit.searchResult?.conversations || []).filter((item) => item.type === 'group'))
 const searchDropdownVisible = computed(() => searchFocused.value && Boolean(searchKeyword.value.trim()) && (topUserMatches.value.length > 0 || recentMessageMatches.value.length > 0))
 const contextMenuStyle = computed(() => ({ left: `${contextMenuPosition.value.x}px`, top: `${contextMenuPosition.value.y}px` }))
 const discoverUsers = computed(() => discoverResult.value?.users || [])
@@ -278,11 +283,11 @@ const handleDocumentClick = () => {
 
 const triggerSearch = async (keyword: string) => {
     if (!keyword.trim()) {
-        chatStore.searchResult = null
+        chatAudit.clearSearchResult()
         return
     }
     try {
-        await chatStore.runSearch(keyword.trim())
+        await chatAudit.runSearch(keyword.trim())
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '搜索失败'))
     }
@@ -304,7 +309,7 @@ const triggerDiscoverSearch = async (keyword: string) => {
 const openConversation = async (conversationId: number, focusSequence?: number) => {
     searchFocused.value = false
     discoverModalOpen.value = false
-    await chatStore.selectConversation(conversationId, focusSequence ? { focusSequence } : undefined)
+    await chatConversation.selectConversation(conversationId, focusSequence ? { focusSequence } : undefined)
     if (route.name !== 'ChatMessages') {
         await router.push({ name: 'ChatMessages' })
     }
@@ -314,12 +319,12 @@ const openConversation = async (conversationId: number, focusSequence?: number) 
 
 const openDirectConversation = async (userId: number) => {
     try {
-        const directConversationId = chatStore.searchResult?.users.find((item) => item.id === userId)?.direct_conversation?.id
-            || chatStore.friends.find((item) => item.friend_user.id === userId)?.direct_conversation?.id
+        const directConversationId = chatAudit.searchResult?.users.find((item) => item.id === userId)?.direct_conversation?.id
+            || chatFriendshipState.friends.find((item) => item.friend_user.id === userId)?.direct_conversation?.id
         if (directConversationId) {
-            await chatStore.selectConversation(directConversationId)
+            await chatConversation.selectConversation(directConversationId)
         } else {
-            await chatStore.openDirectConversation(userId)
+            await chatConversation.openDirectConversation(userId)
         }
         await router.push({ name: 'ChatMessages' })
         allResultModalOpen.value = false
@@ -354,7 +359,7 @@ const handleTopMatchClick = async (item: TopMatchItem) => {
 
 const handleSendFriendRequest = async (userId: number) => {
     try {
-        await chatStore.submitFriendRequest(userId, friendRequestMessage.value.trim() || undefined)
+        await chatFriendship.submitFriendRequest(userId, friendRequestMessage.value.trim() || undefined)
         message.success('好友申请已发送')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '发送好友申请失败'))
@@ -370,7 +375,7 @@ const handleSearchBlur = () => {
 const openGroupModal = async () => {
     groupModalOpen.value = true
     try {
-        await chatStore.loadFriends()
+        await chatFriendship.loadFriends()
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载好友数据失败'))
     }
@@ -383,7 +388,7 @@ const handleCreateGroup = async () => {
     }
     groupSaving.value = true
     try {
-        await chatStore.createGroupConversation({
+        await chatConversation.createGroupConversation({
             name: groupForm.name.trim(),
             member_user_ids: groupForm.member_user_ids,
             join_approval_required: groupForm.join_approval_required,
@@ -412,7 +417,7 @@ const handleHideConversation = async () => {
         return
     }
     try {
-        await chatStore.hideConversation(contextConversation.value.id)
+        await chatConversation.hideConversation(contextConversation.value.id)
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '删除会话失败'))
     } finally {
@@ -425,7 +430,7 @@ const handleTogglePin = async () => {
         return
     }
     try {
-        await chatStore.toggleConversationPin(contextConversation.value.id, !contextConversation.value.is_pinned)
+        await chatConversation.toggleConversationPin(contextConversation.value.id, !contextConversation.value.is_pinned)
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '更新置顶状态失败'))
     } finally {

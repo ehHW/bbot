@@ -80,6 +80,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import { routes } from '@/router/routes'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { useUserStore } from '@/stores/user'
 
 interface MenuMeta {
     menu?: boolean
@@ -88,6 +89,7 @@ interface MenuMeta {
     menuIcon?: 'home' | 'setting' | 'lock' | 'tool' | 'file' | 'upload' | 'user' | 'team' | 'safety' | 'chat' | 'appstore' | 'trophy' | 'music' | 'video'
     permissionCode?: string
     menuOrder?: number
+    superuserOnly?: boolean
 }
 
 const iconMap = {
@@ -114,6 +116,7 @@ const activeAncestorKeys = ref<string[]>([])
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const userStore = useUserStore()
 const menuTheme = computed<'light' | 'dark'>(() => (settingsStore.themeMode === 'dark' ? 'dark' : 'light'))
 const siderStyle = computed(() => ({
     backgroundColor: 'var(--surface-sidebar)',
@@ -149,6 +152,7 @@ const menuItems = computed(() => {
                 continue
             }
             if (meta.menu) {
+                if (meta.superuserOnly && !userStore.isSuperuser) continue
                 if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) continue
                 result.push({
                     key: fullPath,
@@ -171,6 +175,7 @@ const menuItems = computed(() => {
         const meta = (route.meta || {}) as MenuMeta
         if (!meta.menu) continue
         const fullPath = resolveFullPath(route.path, '')
+        if (meta.superuserOnly && !userStore.isSuperuser) continue
         if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) continue
 
         const subItems = route.children?.length ? collectChildren(route.children, fullPath) : []

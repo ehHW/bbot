@@ -1,5 +1,7 @@
 import instance from '@/utils/request'
 
+export type FileManageScope = 'user' | 'system'
+
 export interface AssetPayload {
     id: number
     file_md5: string | null
@@ -14,6 +16,7 @@ export interface AssetPayload {
     width: number | null
     height: number | null
     duration_seconds: number | null
+    extra_metadata: Record<string, unknown>
     url: string
 }
 
@@ -38,7 +41,10 @@ export interface FileEntryItem {
     id: number
     display_name: string
     stored_name: string
+    resource_kind?: 'resource_center' | 'chat_attachment' | 'chat_upload'
+    owner_user_id?: number | null
     is_dir: boolean
+    is_virtual?: boolean
     parent_id: number | null
     file_size: number
     file_md5: string
@@ -52,6 +58,7 @@ export interface FileEntryItem {
     expires_at: string | null
     remaining_days: number | null
     recycle_original_parent_id: number | null
+    owner_name?: string
     asset_reference_id?: number | null
     asset_reference?: AssetReferencePayload | null
     asset?: AssetPayload | null
@@ -59,8 +66,9 @@ export interface FileEntryItem {
 
 export interface FileEntriesResponse {
     parent: FileEntryItem | null
-    breadcrumbs: Array<{ id: number | null; name: string }>
+    breadcrumbs: Array<{ id: number | null; name: string; owner_user_id?: number | null }>
     items: FileEntryItem[]
+    owner_user?: { id: number; name: string } | null
 }
 
 export interface SearchFileEntryItem extends FileEntryItem {
@@ -85,19 +93,36 @@ export interface UploadPrecheckPayload {
     relative_path?: string
 }
 
-export const getFileEntriesApi = (parentId?: number | null) => {
+const buildScopeParams = (scope: FileManageScope = 'user', ownerUserId?: number | null) => (
+    scope === 'system'
+        ? {
+            scope: 'system',
+            owner_user_id: ownerUserId ?? undefined,
+        }
+        : {}
+)
+
+const buildScopePayload = <T extends Record<string, unknown>>(payload: T, scope: FileManageScope = 'user') => (
+    scope === 'system'
+        ? { ...payload, scope: 'system' }
+        : payload
+)
+
+export const getFileEntriesApi = (parentId?: number | null, scope: FileManageScope = 'user', ownerUserId?: number | null) => {
     return instance.get<FileEntriesResponse>('upload/files/', {
         params: {
             parent_id: parentId ?? undefined,
+            ...buildScopeParams(scope, ownerUserId),
         },
     })
 }
 
-export const searchFileEntriesApi = (keyword: string, limit: number = 50) => {
+export const searchFileEntriesApi = (keyword: string, limit: number = 50, scope: FileManageScope = 'user', ownerUserId?: number | null) => {
     return instance.get<SearchFileEntriesResponse>('upload/search/', {
         params: {
             keyword,
             limit,
+            ...buildScopeParams(scope, ownerUserId),
         },
     })
 }
@@ -121,8 +146,8 @@ export const createFolderApi = (payload: { name: string; parent_id?: number | nu
     return instance.post<FileEntryItem>('upload/folders/', payload)
 }
 
-export const deleteFileEntryApi = (id: number) => {
-    return instance.post<{ detail: string; moved_count?: number; removed_db_files?: number; removed_db_dirs?: number; removed_disk_files?: number }>('upload/delete/', { id })
+export const deleteFileEntryApi = (id: number, scope: FileManageScope = 'user') => {
+    return instance.post<{ detail: string; moved_count?: number; removed_db_files?: number; removed_db_dirs?: number; removed_disk_files?: number }>('upload/delete/', buildScopePayload({ id }, scope))
 }
 
 export const renameFileEntryApi = (payload: { id: number; name: string }) => {
@@ -166,4 +191,12 @@ export const mergeChunksApi = (payload: {
     return instance.post<{ task_id: string; message: string; asset_reference_id?: number }>('upload/merge/', payload, {
         timeout: 30000,
     })
+}
+
+export const saveChatAttachmentToResourceApi = (payload: {
+    source_asset_reference_id: number
+    parent_id?: number | null
+    display_name?: string
+}) => {
+    return instance.post<{ detail: string; file: FileEntryItem }>('upload/chat-attachments/save/', payload)
 }

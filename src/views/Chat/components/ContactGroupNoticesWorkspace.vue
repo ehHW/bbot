@@ -9,7 +9,7 @@
 
         <a-divider orientation="left">入群申请</a-divider>
         <div class="drawer-list">
-            <div v-for="request in chatStore.globalGroupJoinRequests" :key="request.id" class="drawer-list-item request-item">
+            <div v-for="request in chatGroupState.globalGroupJoinRequests" :key="request.id" class="drawer-list-item request-item">
                 <div>
                     <div class="drawer-list-title">{{ request.target_user.display_name || request.target_user.username }} 申请加入群聊</div>
                     <div class="drawer-list-desc">群聊 #{{ request.conversation_id }} · {{ formatDateTime(request.created_at) }}</div>
@@ -19,19 +19,19 @@
                     <a-button size="small" @click="handleJoinRequestAction(request.id, 'reject', request.conversation_id)">拒绝</a-button>
                 </a-space>
             </div>
-            <a-empty v-if="!chatStore.globalGroupJoinRequests.length" description="暂无待处理入群申请" />
+            <a-empty v-if="!chatGroupState.globalGroupJoinRequests.length" description="暂无待处理入群申请" />
         </div>
 
         <a-divider orientation="left">群消息</a-divider>
         <div class="drawer-list">
-            <div v-for="notice in chatStore.groupNoticeItems" :key="notice.id" class="drawer-list-item">
+            <div v-for="notice in chatGroupState.groupNoticeItems" :key="notice.id" class="drawer-list-item">
                 <div>
                     <div class="drawer-list-title">{{ notice.message }}</div>
                     <div class="drawer-list-desc">{{ formatDateTime(notice.created_at) }}</div>
                 </div>
                 <a-button v-if="notice.conversation_id" size="small" @click="openConversation(notice.conversation_id)">查看会话</a-button>
             </div>
-            <a-empty v-if="!chatStore.groupNoticeItems.length" description="暂无群通知" />
+            <a-empty v-if="!chatGroupState.groupNoticeItems.length" description="暂无群通知" />
         </div>
     </section>
 </template>
@@ -45,10 +45,14 @@ import { getErrorMessage } from '@/utils/error'
 
 const router = useRouter()
 const { chatStore, formatDateTime } = useChatShell()
+const chatGroupState = chatStore.state.groupState
+const chatConversationState = chatStore.state.conversationState
+const chatGroup = chatStore.group
+const chatConversation = chatStore.conversation
 
 const loadData = async () => {
     try {
-        await chatStore.loadGlobalGroupJoinRequests()
+        await chatGroup.loadGlobalGroupJoinRequests()
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载群通知失败'))
     }
@@ -56,8 +60,8 @@ const loadData = async () => {
 
 const handleJoinRequestAction = async (requestId: number, action: 'approve' | 'reject', conversationId: number) => {
     try {
-        await chatStore.handleJoinRequest(requestId, action, conversationId)
-        await chatStore.loadGlobalGroupJoinRequests()
+        await chatGroup.handleJoinRequest(requestId, action, conversationId)
+        await chatGroup.loadGlobalGroupJoinRequests()
         message.success('审批已处理')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '处理入群申请失败'))
@@ -65,9 +69,9 @@ const handleJoinRequestAction = async (requestId: number, action: 'approve' | 'r
 }
 
 const openConversation = async (conversationId: number) => {
-    const target = chatStore.conversations.find((item) => item.id === conversationId)
+    const target = chatConversationState.conversations.find((item) => item.id === conversationId)
     if (target) {
-        await chatStore.selectConversation(conversationId)
+        await chatConversation.selectConversation(conversationId)
     }
     await router.push({ name: 'ChatMessages' })
 }

@@ -1,7 +1,7 @@
 import { computed, markRaw, ref, toRaw, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi, restoreRecycleBinEntryApi } from '@/api/upload'
-import type { FileEntryItem } from '@/api/upload'
+import type { FileEntryItem, FileManageScope } from '@/api/upload'
 import { uploadFileWithCategory } from '@/utils/fileUploader'
 import { useAuthStore } from '@/stores/auth'
 
@@ -136,9 +136,11 @@ const calcOverallProgress = (task: Pick<UploadTaskItem, 'hashProgress' | 'chunkP
 
 export const useFileStore = defineStore('file', () => {
     const entries = ref<FileEntryItem[]>([])
-    const breadcrumbs = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: '我的文件' }])
+    const breadcrumbs = ref<Array<{ id: number | null; name: string; owner_user_id?: number | null }>>([{ id: null, name: '我的文件' }])
     const currentParentId = ref<number | null>(null)
     const currentParent = ref<FileEntryItem | null>(null)
+    const currentScope = ref<FileManageScope>('user')
+    const currentOwnerUserId = ref<number | null>(null)
     const loadingEntries = ref(false)
 
     const uploadTasks = ref<UploadTaskItem[]>([])
@@ -172,15 +174,31 @@ export const useFileStore = defineStore('file', () => {
         ),
     )
 
-    const loadEntries = async (parentId?: number | null) => {
+    const setScope = (scope: FileManageScope) => {
+        if (currentScope.value === scope) {
+            return
+        }
+        currentScope.value = scope
+        entries.value = []
+        currentParent.value = null
+        currentParentId.value = null
+        currentOwnerUserId.value = null
+        breadcrumbs.value = [{ id: null, name: scope === 'system' ? '系统文件' : '我的文件' }]
+    }
+
+    const loadEntries = async (parentId?: number | null, ownerUserId?: number | null) => {
         loadingEntries.value = true
         try {
             const targetParentId = parentId === undefined ? currentParentId.value : parentId
-            const { data } = await getFileEntriesApi(targetParentId)
+            const targetOwnerUserId = currentScope.value === 'system'
+                ? (ownerUserId === undefined ? currentOwnerUserId.value : ownerUserId)
+                : null
+            const { data } = await getFileEntriesApi(targetParentId, currentScope.value, targetOwnerUserId)
             entries.value = data.items
             breadcrumbs.value = data.breadcrumbs
             currentParent.value = data.parent
-            currentParentId.value = data.parent?.id ?? null
+            currentParentId.value = data.parent?.id ?? (targetParentId ?? null)
+            currentOwnerUserId.value = currentScope.value === 'system' ? (data.owner_user?.id ?? targetOwnerUserId ?? null) : null
         } finally {
             loadingEntries.value = false
         }
@@ -188,14 +206,21 @@ export const useFileStore = defineStore('file', () => {
 
     const enterFolder = async (folder: FileEntryItem) => {
         if (!folder.is_dir) return
+        if (currentScope.value === 'system' && !currentOwnerUserId.value && folder.is_virtual && folder.owner_user_id) {
+            await loadEntries(null, folder.owner_user_id)
+            return
+        }
         await loadEntries(folder.id)
     }
 
-    const goToBreadcrumb = async (id: number | null) => {
-        await loadEntries(id)
+    const goToBreadcrumb = async (item: { id: number | null; owner_user_id?: number | null }) => {
+        await loadEntries(item.id, item.owner_user_id ?? null)
     }
 
     const createFolder = async (name: string, parentId?: number | null) => {
+        if (currentScope.value === 'system') {
+            throw new Error('系统文件管理暂不支持新建目录')
+        }
         await createFolderApi({
             name,
             parent_id: parentId ?? currentParentId.value,
@@ -204,25 +229,34 @@ export const useFileStore = defineStore('file', () => {
     }
 
     const deleteEntry = async (id: number) => {
-        const { data } = await deleteFileEntryApi(id)
-        await loadEntries(currentParentId.value)
+        const { data } = await deleteFileEntryApi(id, currentScope.value)
+        await loadEntries(currentParentId.value, currentOwnerUserId.value)
         return data
     }
 
     const renameEntry = async (id: number, name: string) => {
+        if (currentScope.value === 'system') {
+            throw new Error('系统文件管理暂不支持重命名')
+        }
         await renameFileEntryApi({ id, name })
-        await loadEntries(currentParentId.value)
+        await loadEntries(currentParentId.value, currentOwnerUserId.value)
     }
 
     const restoreRecycleEntry = async (id: number) => {
+        if (currentScope.value === 'system') {
+            throw new Error('系统文件管理不存在回收站')
+        }
         const { data } = await restoreRecycleBinEntryApi(id)
-        await loadEntries(currentParentId.value)
+        await loadEntries(currentParentId.value, currentOwnerUserId.value)
         return data
     }
 
     const clearRecycleBinEntries = async (ids?: number[]) => {
+        if (currentScope.value === 'system') {
+            throw new Error('系统文件管理不存在回收站')
+        }
         const { data } = await clearRecycleBinApi(ids)
-        await loadEntries(currentParentId.value)
+        await loadEntries(currentParentId.value, currentOwnerUserId.value)
         return data
     }
 
@@ -302,7 +336,7 @@ export const useFileStore = defineStore('file', () => {
             task.status = 'completed'
 
             if ((task.parentId ?? null) === (currentParentId.value ?? null)) {
-                await loadEntries(currentParentId.value)
+                await loadEntries(currentParentId.value, currentOwnerUserId.value)
             }
         } catch (error: unknown) {
             const message = String((error as { message?: string } | undefined)?.message || '')
@@ -481,6 +515,8 @@ export const useFileStore = defineStore('file', () => {
         breadcrumbs,
         currentParentId,
         currentParent,
+        currentScope,
+        currentOwnerUserId,
         loadingEntries,
         uploadTasks,
         overallUploadProgress,
@@ -491,6 +527,7 @@ export const useFileStore = defineStore('file', () => {
         canPauseAll,
         canCancelAll,
         autoResumePausedOnReload,
+        setScope,
         loadEntries,
         enterFolder,
         goToBreadcrumb,

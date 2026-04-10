@@ -19,7 +19,7 @@
         <a-tabs v-model:activeKey="activeContactTab" class="contact-tabs">
             <a-tab-pane key="friends" tab="好友">
                 <div class="friend-meta">
-                    <span>{{ chatStore.friends.length }} 位好友</span>
+                    <span>{{ chatFriendshipState.friends.length }} 位好友</span>
                 </div>
 
                 <div class="chat-panel__list">
@@ -47,7 +47,7 @@
             </a-tab-pane>
             <a-tab-pane key="groups" tab="群组">
                 <div class="friend-meta">
-                    <span>{{ chatStore.contactGroupConversations.length }} 个群组</span>
+                    <span>{{ chatConversationState.contactGroupConversations.length }} 个群组</span>
                 </div>
 
                 <div class="chat-panel__list">
@@ -74,7 +74,7 @@
             </div>
             <a-textarea v-model:value="friendRequestMessage" :auto-size="{ minRows: 2, maxRows: 4 }" placeholder="好友申请附言（可选）" />
             <div class="chat-panel__list modal-list">
-                <div v-for="user in chatStore.searchResult?.users || []" :key="user.id" class="drawer-list-item">
+                <div v-for="user in chatAudit.searchResult?.users || []" :key="user.id" class="drawer-list-item">
                     <div>
                         <div class="drawer-list-title">{{ user.display_name || user.username }}</div>
                         <div class="drawer-list-desc">{{ user.username }}</div>
@@ -84,7 +84,7 @@
                         <a-button size="small" type="primary" @click="handleSendFriendRequest(user.id)">加好友</a-button>
                     </a-space>
                 </div>
-                <a-empty v-if="!(chatStore.searchResult?.users || []).length && discoverKeyword.trim()" description="暂无匹配用户" />
+                <a-empty v-if="!(chatAudit.searchResult?.users || []).length && discoverKeyword.trim()" description="暂无匹配用户" />
             </div>
         </a-modal>
     </section>
@@ -100,6 +100,13 @@ import { getErrorMessage } from '@/utils/error'
 const route = useRoute()
 const router = useRouter()
 const { chatStore } = useChatShell()
+const chatConversationState = chatStore.state.conversationState
+const chatFriendshipState = chatStore.state.friendshipState
+const chatGroupState = chatStore.state.groupState
+const chatConversation = chatStore.conversation
+const chatFriendship = chatStore.friendship
+const chatGroup = chatStore.group
+const chatAudit = chatStore.audit
 const contactKeyword = ref('')
 const activeContactTab = ref<'friends' | 'groups'>('friends')
 const addFriendModalOpen = ref(false)
@@ -114,17 +121,17 @@ const tallModalBodyStyle = {
 }
 
 const pendingFriendRequestCount = computed(
-    () => chatStore.unreadPendingFriendRequestCount,
+    () => chatFriendshipState.unreadPendingFriendRequestCount,
 )
-const groupNoticeCount = computed(() => chatStore.globalGroupJoinRequests.length + chatStore.groupNoticeItems.length)
-const friendNoticeShortcutCount = computed(() => pendingFriendRequestCount.value + chatStore.unreadFriendNoticeCount)
+const groupNoticeCount = computed(() => chatGroupState.globalGroupJoinRequests.length + chatGroupState.groupNoticeItems.length)
+const friendNoticeShortcutCount = computed(() => pendingFriendRequestCount.value + chatFriendshipState.unreadFriendNoticeCount)
 
 const filteredFriends = computed(() => {
     const keyword = contactKeyword.value.trim().toLowerCase()
     if (!keyword) {
-        return chatStore.friends
+        return chatFriendshipState.friends
     }
-    return chatStore.friends.filter((item) => {
+    return chatFriendshipState.friends.filter((item) => {
         const target = `${item.remark || ''} ${item.friend_user.display_name} ${item.friend_user.username}`.toLowerCase()
         return target.includes(keyword)
     })
@@ -133,9 +140,9 @@ const filteredFriends = computed(() => {
 const filteredGroups = computed(() => {
     const keyword = contactKeyword.value.trim().toLowerCase()
     if (!keyword) {
-        return chatStore.contactGroupConversations
+        return chatConversationState.contactGroupConversations
     }
-    return chatStore.contactGroupConversations.filter((item) => {
+    return chatConversationState.contactGroupConversations.filter((item) => {
         const target = `${item.name} ${item.last_message_preview || ''}`.toLowerCase()
         return target.includes(keyword)
     })
@@ -143,7 +150,7 @@ const filteredGroups = computed(() => {
 
 const reloadFriendData = async () => {
     try {
-        await Promise.all([chatStore.loadFriends(), chatStore.loadFriendRequests(), chatStore.loadGlobalGroupJoinRequests(), chatStore.loadContactGroupConversations()])
+        await Promise.all([chatFriendship.loadFriends(), chatFriendship.loadFriendRequests(), chatGroup.loadGlobalGroupJoinRequests(), chatConversation.loadContactGroupConversations()])
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载好友数据失败'))
     }
@@ -152,11 +159,11 @@ const reloadFriendData = async () => {
 const handleOpenFriendChat = async (userId: number, conversationId: number | null) => {
     try {
         if (conversationId) {
-            await chatStore.selectConversation(conversationId)
+            await chatConversation.selectConversation(conversationId)
         } else {
-            await chatStore.openDirectConversation(userId)
+            await chatConversation.openDirectConversation(userId)
         }
-        await chatStore.loadFriends()
+        await chatFriendship.loadFriends()
         addFriendModalOpen.value = false
         await router.push({ name: 'ChatMessages' })
     } catch (error: unknown) {
@@ -166,7 +173,7 @@ const handleOpenFriendChat = async (userId: number, conversationId: number | nul
 
 const handleDeleteFriend = async (userId: number) => {
     try {
-        await chatStore.removeFriend(userId)
+        await chatFriendship.removeFriend(userId)
         message.success('好友已删除')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '删除好友失败'))
@@ -175,8 +182,8 @@ const handleDeleteFriend = async (userId: number) => {
 
 const handleOpenGroup = async (conversationId: number) => {
     try {
-        await chatStore.selectConversation(conversationId)
-        await chatStore.loadContactGroupConversations()
+        await chatConversation.selectConversation(conversationId)
+        await chatConversation.loadContactGroupConversations()
         await router.push({ name: 'ChatMessages' })
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '打开群聊失败'))
@@ -185,7 +192,7 @@ const handleOpenGroup = async (conversationId: number) => {
 
 const handleSendFriendRequest = async (userId: number) => {
     try {
-        await chatStore.submitFriendRequest(userId, friendRequestMessage.value.trim() || undefined)
+        await chatFriendship.submitFriendRequest(userId, friendRequestMessage.value.trim() || undefined)
         message.success('好友申请已发送')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '发送好友申请失败'))
@@ -200,11 +207,11 @@ watch(
             searchTimer.value = null
         }
         if (!keyword.trim()) {
-            chatStore.searchResult = null
+            chatAudit.clearSearchResult()
             return
         }
         searchTimer.value = window.setTimeout(() => {
-            void chatStore.runSearch(keyword.trim())
+            void chatAudit.runSearch(keyword.trim())
         }, 250)
     },
 )

@@ -17,21 +17,24 @@
 </template>
 
 <script setup lang="ts">
-import { AuditOutlined, MessageOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons-vue'
+import { MessageOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatShell } from '@/views/Chat/useChatShell'
 
 const router = useRouter()
 const route = useRoute()
-const { chatStore, isStealthAuditEnabled } = useChatShell()
+const { chatStore } = useChatShell()
+const chatConversationState = chatStore.state.conversationState
+const chatFriendshipState = chatStore.state.friendshipState
+const chatGroupState = chatStore.state.groupState
 
 const pendingFriendRequestCount = computed(
-    () => chatStore.unreadPendingFriendRequestCount,
+    () => chatFriendshipState.unreadPendingFriendRequestCount,
 )
 
 const contactNoticeCount = computed(
-    () => pendingFriendRequestCount.value + chatStore.globalGroupJoinRequests.length + chatStore.groupNoticeItems.length + chatStore.unreadFriendNoticeCount,
+    () => pendingFriendRequestCount.value + chatGroupState.globalGroupJoinRequests.length + chatGroupState.groupNoticeItems.length + chatFriendshipState.unreadFriendNoticeCount,
 )
 
 const badgeStyle = {
@@ -40,19 +43,15 @@ const badgeStyle = {
 }
 
 const items = computed(() => {
-    const base = [
-        { name: 'ChatMessages', label: '消息', icon: MessageOutlined, count: chatStore.totalUnreadCount },
-        { name: 'ChatContactsFriends', label: '联系人', icon: TeamOutlined, count: contactNoticeCount.value },
+    return [
+        { name: 'ChatMessages', label: '消息', icon: MessageOutlined, count: chatConversationState.totalUnreadCount },
+        { name: 'ChatContactsFriendNotices', label: '联系人', icon: TeamOutlined, count: contactNoticeCount.value },
         { name: 'ChatSettingsShortcuts', label: '设置', icon: SettingOutlined, count: 0 },
     ]
-    if (isStealthAuditEnabled.value) {
-        base.push({ name: 'ChatAudit', label: '巡检', icon: AuditOutlined, count: 0 })
-    }
-    return base
 })
 
 const isActive = (name: string) => {
-    if (name === 'ChatContactsFriends') {
+    if (name === 'ChatContactsFriendNotices') {
         return String(route.name || '').startsWith('ChatContacts')
     }
     if (name === 'ChatSettingsShortcuts') {

@@ -195,7 +195,7 @@ const queueFilesForUpload = async (files: File[]) => {
 
 const openBreadcrumb = async (id: number | null) => {
     try {
-        await fileStore.goToBreadcrumb(id)
+        await fileStore.goToBreadcrumb({ id })
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '打开目录失败'))
     }

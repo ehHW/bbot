@@ -1,6 +1,7 @@
 import type { ComputedRef, Ref } from 'vue'
 import { getConversationDetailApi, getConversationMessagesApi, readConversationApi } from '@/api/chat'
 import type { ChatConversationItem, ChatFriendshipItem, ChatMessageAssetPayload, ChatMessageCursor, ChatMessageItem } from '@/types/chat'
+import { getDirectConversationRemovedFailure, getWebSocketDisconnectedFailure, getWebSocketUnavailableFailure } from '@/stores/chat/messageFailure'
 import { globalWebSocket } from '@/utils/websocket'
 import { mergeConversationMessages } from '@/stores/chat/message'
 
@@ -103,14 +104,15 @@ export async function sendTextMessageAction(options: {
         throw new Error('消息不能为空')
     }
     if (!globalWebSocket.connected.value) {
-        throw new Error('WebSocket 未连接，当前无法发送消息')
+        throw new Error(getWebSocketDisconnectedFailure('message'))
     }
     const clientMessageId = `chat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const directConversationDeletedFriend =
         conversation.type === 'direct' && !isSelfDirectConversation(conversation, options.currentUserId) && !options.friends.value.some((item) => item.direct_conversation?.id === conversation.id)
     if (directConversationDeletedFriend) {
-        options.insertLocalMessage(conversation.id, text, clientMessageId, 'failed', '你们已不是好友，当前私聊消息发送失败')
-        throw new Error('你们已不是好友，当前私聊消息发送失败')
+        const errorMessage = getDirectConversationRemovedFailure('message')
+        options.insertLocalMessage(conversation.id, text, clientMessageId, 'failed', errorMessage)
+        throw new Error(errorMessage)
     }
     options.insertLocalMessage(conversation.id, text, clientMessageId, 'sending')
     options.setSending(true)
@@ -123,9 +125,10 @@ export async function sendTextMessageAction(options: {
         quoted_message_id: options.quotedMessageId,
     })
     if (!sent) {
-        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', '消息发送失败，WebSocket 未就绪')
+        const errorMessage = getWebSocketUnavailableFailure('message')
+        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
         options.clearSendingState()
-        throw new Error('消息发送失败，WebSocket 未就绪')
+        throw new Error(errorMessage)
     }
     options.scheduleSync(conversation.id, clientMessageId)
 }
@@ -147,8 +150,9 @@ export async function retryMessageAction(options: {
     const directConversationDeletedFriend =
         conversation.type === 'direct' && !isSelfDirectConversation(conversation, options.currentUserId) && !options.friends.value.some((item) => item.direct_conversation?.id === conversation.id)
     if (directConversationDeletedFriend) {
-        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', '你们已不是好友，当前私聊消息发送失败')
-        throw new Error('你们已不是好友，当前私聊消息发送失败')
+        const errorMessage = getDirectConversationRemovedFailure('message')
+        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
+        throw new Error(errorMessage)
     }
     const sent = globalWebSocket.send({
         type: 'chat_send_message',
@@ -157,20 +161,35 @@ export async function retryMessageAction(options: {
         client_message_id: clientMessageId,
     })
     if (!sent) {
-        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', '消息发送失败，WebSocket 未就绪')
-        throw new Error('消息发送失败，WebSocket 未就绪')
+        const errorMessage = getWebSocketUnavailableFailure('message')
+        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
+        throw new Error(errorMessage)
     }
 }
 
 export async function sendAssetMessageAction(options: {
-    sourceAssetReferenceId: number
+    sourceAssetReferenceId?: number
     displayName: string
     mediaType: string
     mimeType?: string
     fileSize?: number
     url?: string
+    streamUrl?: string
+    thumbnailUrl?: string
+    processingStatus?: string
     quotedMessageId?: number
     existingClientMessageId?: string
+    uploadBeforeSend?: (updateProgress: (payloadPatch: Partial<ChatMessageAssetPayload>) => void) => Promise<{
+        sourceAssetReferenceId: number
+        displayName?: string
+        mediaType?: string
+        mimeType?: string
+        fileSize?: number
+        url?: string
+        streamUrl?: string
+        thumbnailUrl?: string
+        processingStatus?: string
+    }>
     activeConversation: ComputedRef<ChatConversationItem | null>
     friends: Ref<ChatFriendshipItem[]>
     currentUserId?: number
@@ -186,6 +205,7 @@ export async function sendAssetMessageAction(options: {
         },
     ) => void
     updateLocalMessageStatus: (conversationId: number, clientMessageId: string, status: 'sending' | 'failed', error?: string) => void
+    updateLocalAttachmentPayload: (conversationId: number, clientMessageId: string, payloadPatch: Partial<ChatMessageAssetPayload>) => void
     clearSendingState: () => void
     setSending: (value: boolean) => void
     scheduleFallback: (conversationId: number, clientMessageId: string) => void
@@ -196,7 +216,7 @@ export async function sendAssetMessageAction(options: {
         throw new Error('请先选择会话')
     }
     if (!globalWebSocket.connected.value) {
-        throw new Error('WebSocket 未连接，当前无法发送附件')
+        throw new Error(getWebSocketDisconnectedFailure('asset'))
     }
 
     const normalizedDisplayName = String(options.displayName || '').trim() || '附件'
@@ -206,17 +226,22 @@ export async function sendAssetMessageAction(options: {
     const clientMessageId = options.existingClientMessageId || `chat_asset_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const payload: ChatMessageAssetPayload & { client_message_id: string } = {
         client_message_id: clientMessageId,
-        asset_reference_id: options.sourceAssetReferenceId,
-        source_asset_reference_id: options.sourceAssetReferenceId,
+        asset_reference_id: options.sourceAssetReferenceId || 0,
+        source_asset_reference_id: options.sourceAssetReferenceId || 0,
         display_name: normalizedDisplayName,
         media_type: options.mediaType,
         mime_type: options.mimeType || '',
         file_size: options.fileSize,
         url: options.url,
+        stream_url: options.streamUrl,
+        thumbnail_url: options.thumbnailUrl,
+        processing_status: options.processingStatus,
+        upload_progress: options.uploadBeforeSend ? 0 : 100,
+        upload_phase: options.uploadBeforeSend ? 'uploading' : 'sending',
     }
 
     if (directConversationDeletedFriend) {
-        const errorMessage = '你们已不是好友，当前私聊附件发送失败'
+        const errorMessage = getDirectConversationRemovedFailure('asset')
         if (options.existingClientMessageId) {
             options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
         } else {
@@ -244,19 +269,54 @@ export async function sendAssetMessageAction(options: {
         })
     }
 
+    let sourceAssetReferenceId = options.sourceAssetReferenceId || 0
+    if (!sourceAssetReferenceId && options.uploadBeforeSend) {
+        try {
+            const uploadPayload = await options.uploadBeforeSend((payloadPatch) => {
+                options.updateLocalAttachmentPayload(conversation.id, clientMessageId, payloadPatch)
+            })
+            sourceAssetReferenceId = uploadPayload.sourceAssetReferenceId
+            options.updateLocalAttachmentPayload(conversation.id, clientMessageId, {
+                asset_reference_id: sourceAssetReferenceId,
+                source_asset_reference_id: sourceAssetReferenceId,
+                display_name: uploadPayload.displayName || normalizedDisplayName,
+                media_type: uploadPayload.mediaType || options.mediaType,
+                mime_type: uploadPayload.mimeType || options.mimeType || '',
+                file_size: uploadPayload.fileSize || options.fileSize,
+                url: uploadPayload.url || options.url,
+                stream_url: uploadPayload.streamUrl || '',
+                thumbnail_url: uploadPayload.thumbnailUrl || '',
+                processing_status: uploadPayload.processingStatus || '',
+                upload_progress: 100,
+                upload_phase: 'sending',
+            })
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : '上传附件失败'
+            options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
+            options.clearSendingState()
+            throw error instanceof Error ? error : new Error(errorMessage)
+        }
+    }
+    if (!sourceAssetReferenceId) {
+        const errorMessage = '上传完成但未返回资产引用，无法发送附件'
+        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
+        throw new Error(errorMessage)
+    }
+
     options.setSending(true)
     options.scheduleFallback(conversation.id, clientMessageId)
     const sent = globalWebSocket.send({
         type: 'chat_send_asset_message',
         conversation_id: conversation.id,
-        asset_reference_id: options.sourceAssetReferenceId,
+        asset_reference_id: sourceAssetReferenceId,
         client_message_id: clientMessageId,
         quoted_message_id: options.quotedMessageId,
     })
     if (!sent) {
-        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', '附件发送失败，WebSocket 未就绪')
+        const errorMessage = getWebSocketUnavailableFailure('asset')
+        options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)
         options.clearSendingState()
-        throw new Error('附件发送失败，WebSocket 未就绪')
+        throw new Error(errorMessage)
     }
     options.scheduleSync(conversation.id, clientMessageId)
 }

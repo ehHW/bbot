@@ -37,6 +37,17 @@ export function markSeenIdsAction(target: Ref<number[]>, ids: number[]) {
     target.value = [...seen]
 }
 
+export function markStringSeenIdsAction(target: Ref<string[]>, ids: string[]) {
+    if (!ids.length) {
+        return
+    }
+    const seen = new Set(target.value)
+    for (const id of ids) {
+        seen.add(id)
+    }
+    target.value = [...seen]
+}
+
 export async function submitFriendRequestAction(toUserId: number, requestMessage?: string) {
     await createFriendRequestApi({ to_user_id: toUserId, request_message: requestMessage })
 }

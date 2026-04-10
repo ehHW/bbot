@@ -41,9 +41,7 @@ export function resetChatLifecycle(options: {
     sentRequests: Ref<unknown[]>
     seenPendingRequestIds: Ref<number[]>
     seenFriendNoticeIds: Ref<number[]>
-    searchResult: Ref<unknown | null>
-    adminConversations: Ref<unknown[]>
-    adminMessages: Ref<unknown[]>
+    friendNoticeItems: Ref<unknown[]>
     groupNoticeItems: Ref<unknown[]>
     globalGroupJoinRequests: Ref<unknown[]>
     contactGroupConversations: Ref<unknown[]>
@@ -65,9 +63,7 @@ export function resetChatLifecycle(options: {
     options.sentRequests.value = []
     options.seenPendingRequestIds.value = []
     options.seenFriendNoticeIds.value = []
-    options.searchResult.value = null
-    options.adminConversations.value = []
-    options.adminMessages.value = []
+    options.friendNoticeItems.value = []
     options.groupNoticeItems.value = []
     options.globalGroupJoinRequests.value = []
     options.contactGroupConversations.value = []
@@ -83,4 +79,14 @@ export function resetChatLifecycle(options: {
     options.typingTimers.clear()
     options.clearSendingState()
     options.initialized.value = false
+}
+
+export function resetChatSearchAuditState(options: {
+    searchResult: Ref<unknown | null>
+    adminConversations: Ref<unknown[]>
+    adminMessages: Ref<unknown[]>
+}) {
+    options.searchResult.value = null
+    options.adminConversations.value = []
+    options.adminMessages.value = []
 }

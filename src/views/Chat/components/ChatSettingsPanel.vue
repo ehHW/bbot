@@ -4,15 +4,20 @@
             <button type="button" class="setting-item" :class="{ active: route.name === 'ChatSettingsShortcuts' }" @click="router.push({ name: 'ChatSettingsShortcuts' })">
                 <div class="drawer-list-title">快捷键</div>
             </button>
+            <button v-if="userStore.isSuperuser" type="button" class="setting-item" :class="{ active: route.name === 'ChatSettingsInspect' }" @click="router.push({ name: 'ChatSettingsInspect' })">
+                <div class="drawer-list-title">巡检模式</div>
+            </button>
         </div>
     </section>
 </template>
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 </script>
 
 <style scoped>

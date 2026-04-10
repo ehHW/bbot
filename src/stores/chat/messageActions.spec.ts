@@ -46,6 +46,7 @@ describe('sendAssetMessageAction', () => {
     it('rejects direct attachment send when friendship is gone', async () => {
         const insertLocalAttachmentMessage = vi.fn()
         const updateLocalMessageStatus = vi.fn()
+        const updateLocalAttachmentPayload = vi.fn()
 
         await expect(
             sendAssetMessageAction({
@@ -56,6 +57,7 @@ describe('sendAssetMessageAction', () => {
                 friends: ref<ChatFriendshipItem[]>([]),
                 insertLocalAttachmentMessage,
                 updateLocalMessageStatus,
+                updateLocalAttachmentPayload,
                 clearSendingState: vi.fn(),
                 setSending: vi.fn(),
                 scheduleFallback: vi.fn(),
@@ -78,6 +80,7 @@ describe('sendAssetMessageAction', () => {
         const insertLocalAttachmentMessage = vi.fn()
         const scheduleFallback = vi.fn()
         const scheduleSync = vi.fn()
+        const updateLocalAttachmentPayload = vi.fn()
 
         await sendAssetMessageAction({
             sourceAssetReferenceId: 108,
@@ -106,6 +109,7 @@ describe('sendAssetMessageAction', () => {
             ]),
             insertLocalAttachmentMessage,
             updateLocalMessageStatus: vi.fn(),
+            updateLocalAttachmentPayload,
             clearSendingState: vi.fn(),
             setSending: vi.fn(),
             scheduleFallback,

@@ -27,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     'typing-change': [hasContent: boolean]
     'request-submit': []
+    'paste-files': [files: File[]]
 }>()
 
 export type RichMessageComposerExpose = {
@@ -34,6 +35,7 @@ export type RichMessageComposerExpose = {
     focus: () => void
     getSegments: () => ChatComposerSegment[]
     hasContent: () => boolean
+    insertText: (text: string) => void
     insertAttachment: (attachment: ChatComposerAttachmentToken) => void
 }
 
@@ -69,8 +71,20 @@ const createAttachmentChip = (attachment: ChatComposerAttachmentToken) => {
     chip.dataset.mimeType = attachment.mime_type || ''
     chip.dataset.fileSize = String(attachment.file_size || '')
     chip.dataset.url = attachment.url || ''
+    chip.dataset.streamUrl = attachment.stream_url || ''
+    chip.dataset.thumbnailUrl = attachment.thumbnail_url || ''
+    chip.dataset.processingStatus = attachment.processing_status || ''
+    chip.dataset.localUploadId = attachment.local_upload_id || ''
+    const mediaType = String(attachment.media_type || '').toLowerCase()
+    const isImage = mediaType === 'image' && Boolean(attachment.url)
+    const isVideo = mediaType === 'video' && Boolean(attachment.url)
+    const previewNode = isImage
+        ? `<img class="composer-attachment-chip__preview" src="${escapeHtml(attachment.url || '')}" alt="${escapeHtml(attachment.display_name)}" />`
+        : isVideo
+            ? `<video class="composer-attachment-chip__preview" src="${escapeHtml(attachment.url || '')}" muted playsinline preload="metadata"></video>`
+            : `<span class="composer-attachment-chip__icon">${mediaType === 'video' ? 'V' : 'F'}</span>`
     chip.innerHTML = `
-        <span class="composer-attachment-chip__icon">📄</span>
+        ${previewNode}
         <span class="composer-attachment-chip__body">
             <span class="composer-attachment-chip__name">${escapeHtml(attachment.display_name)}</span>
             <span class="composer-attachment-chip__size">${attachment.file_size ? escapeHtml(formatFileSize(attachment.file_size)) : '大小未知'}</span>
@@ -129,6 +143,10 @@ const insertAttachment = (attachment: ChatComposerAttachmentToken) => {
     insertNodeAtCaret(document.createTextNode(' '))
 }
 
+const insertText = (text: string) => {
+    insertTextAtCaret(text)
+}
+
 const clear = () => {
     if (!editorRef.value) {
         return
@@ -142,17 +160,22 @@ const readAttachmentFromElement = (element: HTMLElement): ChatComposerAttachment
         return null
     }
     const sourceAssetReferenceId = Number(element.dataset.sourceAssetReferenceId || 0)
-    if (!sourceAssetReferenceId) {
+    const localUploadId = String(element.dataset.localUploadId || '')
+    if (!sourceAssetReferenceId && !localUploadId) {
         return null
     }
     return {
         token_id: element.dataset.tokenId || `attachment_${Date.now()}`,
-        source_asset_reference_id: sourceAssetReferenceId,
+        source_asset_reference_id: sourceAssetReferenceId || undefined,
         display_name: element.dataset.displayName || '附件',
         media_type: element.dataset.mediaType || 'file',
         mime_type: element.dataset.mimeType || '',
         file_size: Number(element.dataset.fileSize || 0) || undefined,
         url: element.dataset.url || '',
+        stream_url: element.dataset.streamUrl || '',
+        thumbnail_url: element.dataset.thumbnailUrl || '',
+        processing_status: element.dataset.processingStatus || '',
+        local_upload_id: localUploadId || undefined,
     }
 }
 
@@ -224,6 +247,17 @@ const handlePaste = (event: ClipboardEvent) => {
         event.preventDefault()
         return
     }
+    const clipboardItems = Array.from(event.clipboardData?.items || [])
+    const pastedFiles = clipboardItems
+        .filter((item) => item.kind === 'file')
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file))
+        .filter((file) => /^image\/|^video\//.test(String(file.type || '')))
+    if (pastedFiles.length) {
+        event.preventDefault()
+        emit('paste-files', pastedFiles)
+        return
+    }
     const html = event.clipboardData?.getData('text/html') || ''
     const attachments = html ? extractAttachmentNodesFromHtml(html) : []
     if (attachments.length) {
@@ -267,6 +301,7 @@ defineExpose<RichMessageComposerExpose>({
     focus,
     getSegments,
     hasContent: () => getSegments().length > 0,
+    insertText,
     insertAttachment,
 })
 
@@ -340,6 +375,15 @@ function escapeHtml(value: string) {
     height: 28px;
     border-radius: 8px;
     background: rgba(47, 57, 69, 0.1);
+}
+
+.composer-surface__editor :deep(.composer-attachment-chip__preview) {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: rgba(47, 57, 69, 0.08);
+    flex: 0 0 44px;
 }
 
 .composer-surface__editor :deep(.composer-attachment-chip__body) {

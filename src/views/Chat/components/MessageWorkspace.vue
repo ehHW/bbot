@@ -1,11 +1,11 @@
 <template>
     <main class="chat-main" :style="chatMainStyle">
-        <template v-if="chatStore.activeConversation">
+        <template v-if="chatConversationState.activeConversation">
             <header class="chat-main__header">
                 <div class="chat-main__header-main">
                     <div class="chat-main__title-row">
-                        <div class="chat-main__title">{{ chatStore.activeConversation.name }}</div>
-                        <div v-if="chatStore.activeConversation.type === 'group'" class="chat-main__meta-tag">{{ chatStore.activeConversation.member_count }} 人群聊</div>
+                        <div class="chat-main__title">{{ chatConversationState.activeConversation.name }}</div>
+                        <div v-if="chatConversationState.activeConversation.type === 'group'" class="chat-main__meta-tag">{{ chatConversationState.activeConversation.member_count }} 人群聊</div>
                     </div>
                     <div v-if="typingText" class="chat-main__meta">{{ typingText }}</div>
                 </div>
@@ -20,7 +20,7 @@
             </header>
 
             <div ref="messageContainerRef" class="chat-main__messages">
-                <a-button v-if="canLoadOlderMessages" size="small" class="chat-main__load-more" :loading="chatStore.loadingMessages" @click="handleLoadOlderMessages">加载更早消息</a-button>
+                <a-button v-if="canLoadOlderMessages" size="small" class="chat-main__load-more" :loading="chatMessageState.loadingMessages" @click="handleLoadOlderMessages">加载更早消息</a-button>
                 <div v-if="messageSelectionMode" class="chat-main__selection-bar">
                     <span>已选择 {{ selectedMessageIds.length }} 条消息</span>
                     <a-space>
@@ -29,15 +29,21 @@
                     </a-space>
                 </div>
                 <div
-                    v-for="messageItem in chatStore.activeMessages"
+                    v-for="messageItem in chatMessageState.activeMessages"
                     :key="messageItem.id"
                     class="message-row"
-                    :class="[messageRowClass(messageItem), { 'message-row--selection-mode': messageSelectionMode }]"
+                    :class="[messageRowClass(messageItem), { 'message-row--selection-mode': messageSelectionMode, 'message-row--revoked': isRevokedMessage(messageItem) }]"
                     :data-sequence="messageItem.sequence"
                     @click.capture="handleMessageRowClick(messageItem, $event)"
                 >
                     <template v-if="messageItem.is_system">
                         <div class="system-bubble">{{ messageItem.content }}</div>
+                    </template>
+                    <template v-else-if="isRevokedMessage(messageItem)">
+                        <div class="message-revoked-row" @contextmenu.prevent.stop="openMessageMenu($event, messageItem)">
+                            <span>{{ isSelfMessage(messageItem) ? '你已撤回一条消息' : '对方已撤回' }}</span>
+                            <button v-if="canRestoreRevokedMessage(messageItem)" type="button" class="message-revoked-row__restore" @click.stop="handleRestoreRevokedMessage(messageItem)">编辑</button>
+                        </div>
                     </template>
                     <template v-else>
                         <div class="message-row__content" :class="{ self: isSelfMessage(messageItem) }">
@@ -52,9 +58,11 @@
                                     <span v-if="isSelfMessage(messageItem)" class="message-bubble__time self">{{ formatTime(messageItem.created_at) }}</span>
                                     <div v-if="isSelfMessage(messageItem) && messageItem.local_status" class="message-status message-status--inline">
                                         <span v-if="messageItem.local_status === 'sending'" class="message-status__spinner" aria-label="发送中"></span>
-                                        <button v-else type="button" class="message-status__failed" @click.stop="openMessageMenu($event, messageItem)">!</button>
+                                        <a-tooltip v-else :title="getMessageFailureTooltip(messageItem.local_error)">
+                                            <button type="button" class="message-status__failed" @click.stop="openMessageMenu($event, messageItem)">!</button>
+                                        </a-tooltip>
                                     </div>
-                                    <div class="message-bubble" :class="{ self: isSelfMessage(messageItem), 'message-bubble--interactive': hasMessageBubbleAction(messageItem) }" @click="handleMessageBubbleClick(messageItem)" @contextmenu.prevent.stop="openMessageMenu($event, messageItem)">
+                                    <div class="message-bubble" :class="{ self: isSelfMessage(messageItem), 'message-bubble--interactive': hasMessageBubbleAction(messageItem), 'message-bubble--asset': isAssetMessage(messageItem) }" @click="handleMessageBubbleClick(messageItem)" @contextmenu.prevent.stop="openMessageMenu($event, messageItem)">
                                         <div v-if="getForwardedPayload(messageItem)" class="message-bubble__forwarded">
                                             转发自 {{ getForwardedPayload(messageItem)?.sender_name }}
                                         </div>
@@ -62,6 +70,7 @@
                                             v-if="getReplyPayload(messageItem)"
                                             type="button"
                                             class="message-bubble__reply"
+                                            :disabled="Boolean(getReplyPayload(messageItem)?.is_revoked)"
                                             @click.stop="handleReplyJump(getReplyPayload(messageItem)!)"
                                         >
                                             <span class="message-bubble__reply-arrow"><ArrowUpOutlined /></span>
@@ -102,8 +111,34 @@
                                             <ChatRecordCard :record="getChatRecordPayload(messageItem)!" @open="openChatRecordViewerFromMessage(messageItem)" />
                                         </template>
                                         <template v-else-if="isAssetMessage(messageItem)">
-                                            <div class="attachment-bubble" :class="{ self: isSelfMessage(messageItem) }">
-                                                <img v-if="canPreviewImage(messageItem)" :src="getAssetMessagePayload(messageItem)?.url" :alt="getAssetDisplayName(messageItem)" class="attachment-bubble__preview" />
+                                            <div class="attachment-bubble" :class="{ self: isSelfMessage(messageItem), 'attachment-bubble--media': canPreviewImage(messageItem) || canPreviewVideo(messageItem) }">
+                                                <div v-if="canPreviewImage(messageItem) || canPreviewVideo(messageItem)" class="attachment-bubble__media-shell">
+                                                    <img
+                                                        v-if="canPreviewImage(messageItem)"
+                                                        :src="getAssetPreviewImageUrl(messageItem)"
+                                                        :alt="getAssetDisplayName(messageItem)"
+                                                        class="attachment-bubble__preview"
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                        style="aspect-ratio: 16/9; background: #f3f4f6;"
+                                                    />
+                                                    <VideoAttachmentThumbnail
+                                                        v-else-if="canPreviewVideo(messageItem)"
+                                                        :poster-url="getVideoPosterUrl(messageItem)"
+                                                        :source-url="getAssetMessagePayload(messageItem)?.url || ''"
+                                                        :alt="getAssetDisplayName(messageItem)"
+                                                        class="attachment-bubble__preview attachment-bubble__preview--video"
+                                                        style="aspect-ratio: 16/9; background: #111827;"
+                                                    />
+                                                    <div v-if="isAssetUploading(messageItem)" class="attachment-bubble__overlay">
+                                                        <div class="attachment-bubble__progress-ring">{{ getAssetUploadProgress(messageItem) }}%</div>
+                                                    </div>
+                                                    <div v-else-if="showVideoPlayOverlay(messageItem)" class="attachment-bubble__overlay">
+                                                        <button type="button" class="attachment-bubble__play-button" @click.stop="openAssetMessage(messageItem)">
+                                                            <CaretRightFilled />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                                 <div v-else class="attachment-file-card">
                                                     <span class="attachment-file-card__icon">
                                                         <FileOutlined />
@@ -112,10 +147,6 @@
                                                         <span class="attachment-file-card__name">{{ getAssetDisplayName(messageItem) }}</span>
                                                         <span class="attachment-file-card__size">{{ formatAssetFileSize(messageItem) }}</span>
                                                     </div>
-                                                </div>
-                                                <div v-if="canPreviewImage(messageItem)" class="attachment-bubble__body">
-                                                    <span class="attachment-bubble__name">{{ getAssetDisplayName(messageItem) }}</span>
-                                                    <span class="attachment-bubble__size">{{ formatAssetFileSize(messageItem) }}</span>
                                                 </div>
                                             </div>
                                         </template>
@@ -148,12 +179,10 @@
 
             <footer class="chat-main__composer">
                 <div class="chat-main__composer-toolbar">
-                    <a-dropdown placement="topLeft" :trigger="['click']">
-                        <a-tooltip title="附件与资源中心">
-                            <a-button class="chat-main__composer-trigger" :disabled="composerDisabled || attachmentUploading">
-                                <PaperClipOutlined />
-                            </a-button>
-                        </a-tooltip>
+                    <a-dropdown placement="topLeft" :trigger="['hover']">
+                        <a-button class="chat-main__composer-trigger" :disabled="composerDisabled || attachmentUploading">
+                            <PaperClipOutlined />
+                        </a-button>
                         <template #overlay>
                             <a-menu @click="handleComposerMenuClick">
                                 <a-menu-item key="attachment">本地附件</a-menu-item>
@@ -176,6 +205,7 @@
                     :placeholder="composerPlaceholder"
                     :send-hotkey="settingsStore.chatSendHotkey"
                     @typing-change="handleComposerTypingChange"
+                    @paste-files="handleComposerPasteFiles"
                     @request-submit="handleSendMessage"
                 />
                 <div class="chat-main__composer-actions">
@@ -189,76 +219,41 @@
 
         <transition name="message-menu-fade">
             <div v-if="messageMenuOpen && messageMenuMessage" class="failed-menu" :style="messageMenuStyle">
+                <div v-if="messageMenuMessage.local_status === 'failed'" class="failed-menu__hint">
+                    <div class="failed-menu__hint-title">{{ getMessageFailureHint(messageMenuMessage.local_error) }}</div>
+                    <div v-if="getMessageFailureDetail(messageMenuMessage.local_error)" class="failed-menu__hint-detail">{{ getMessageFailureDetail(messageMenuMessage.local_error) }}</div>
+                </div>
                 <button type="button" class="failed-menu__item" @click="handleCopyMessage">复制</button>
+                <button v-if="isAssetMessage(messageMenuMessage)" type="button" class="failed-menu__item" @click="handleDownloadAssetMessage">下载</button>
+                <button v-if="isAssetMessage(messageMenuMessage)" type="button" class="failed-menu__item" @click="handleSaveAssetToResource">保存到资源中心</button>
                 <button type="button" class="failed-menu__item" @click="handleForwardMessage">转发</button>
                 <button type="button" class="failed-menu__item" @click="handleQuoteMessage">引用</button>
+                <button v-if="canDeleteMessage(messageMenuMessage)" type="button" class="failed-menu__item" @click="handleDeleteMessage">删除</button>
                 <button type="button" class="failed-menu__item" @click="enableMessageSelection(messageMenuMessage)">多选</button>
+                <button v-if="canRevokeMessage(messageMenuMessage)" type="button" class="failed-menu__item" @click="handleRevokeMessage">撤回</button>
                 <button v-if="messageMenuMessage.local_status === 'failed'" type="button" class="failed-menu__item" @click="handleRetryMessage">重新发送</button>
             </div>
         </transition>
 
-        <a-modal v-model:open="forwardModalOpen" title="选择聊天" :footer="null" :width="CHAT_MODAL_WIDTH_LG">
-            <div class="forward-modal">
-                <div class="forward-modal__topbar">
-                    <div class="forward-modal__summary">{{ forwardingMessageIds.length > 1 ? '选择聊天后继续选择逐条转发或合并转发' : '选择一个聊天目标后会继续发送这条消息' }}</div>
-                    <a-input v-model:value="forwardSearchKeyword" allow-clear placeholder="搜索会话 / 好友 / 群组" class="forward-modal__search" />
-                </div>
-                <div v-if="recentForwardTargets.length" class="forward-modal__section">
-                    <div class="forward-modal__section-title">最近转发</div>
-                    <div class="forward-modal__recent-grid">
-                        <button
-                            v-for="target in recentForwardTargets"
-                            :key="target.key"
-                            type="button"
-                            class="forward-modal__recent-card"
-                            :class="{ 'is-active': selectedForwardTargetKey === target.key }"
-                            :disabled="forwarding"
-                            @click="handleSelectForwardTarget(target)"
-                        >
-                            <a-avatar :src="target.avatar || undefined" :size="44">{{ avatarText(target.name) }}</a-avatar>
-                            <span class="forward-modal__recent-name">{{ target.name }}</span>
-                            <span class="forward-modal__recent-desc">{{ target.targetType === 'friend' ? '好友' : target.description || '会话' }}</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="forward-modal__section">
-                    <div class="forward-modal__section-title">最近聊天</div>
-                    <div class="forward-modal__list">
-                        <button
-                            v-for="target in filteredForwardTargets"
-                            :key="target.key"
-                            type="button"
-                            class="forward-modal__item"
-                            :class="{ 'is-active': selectedForwardTargetKey === target.key }"
-                            :disabled="forwarding"
-                            @click="handleSelectForwardTarget(target)"
-                        >
-                            <a-avatar :src="target.avatar || undefined" :size="44">{{ avatarText(target.name) }}</a-avatar>
-                            <div class="forward-modal__body">
-                                <span class="forward-modal__name">{{ target.name }}</span>
-                                <span class="forward-modal__desc">{{ target.description || (target.targetType === 'friend' ? '好友' : '暂无消息') }}</span>
-                            </div>
-                            <span class="forward-modal__type">{{ target.targetType === 'friend' ? '好友' : '聊天' }}</span>
-                        </button>
-                        <a-empty v-if="!filteredForwardTargets.length" description="没有匹配的聊天目标" />
-                    </div>
-                </div>
-            </div>
-        </a-modal>
-
-        <a-modal v-model:open="forwardModeModalOpen" title="选择转发方式" :footer="null" :width="420">
-            <div class="forward-mode-modal">
-                <div class="forward-mode-modal__summary">将 {{ buildForwardMessageSummary() }} 发送给 {{ pendingForwardTarget?.name || '目标会话' }}</div>
-                <button type="button" class="forward-mode-modal__action" :disabled="forwarding" @click="handleConfirmForwardMode('separate')">
-                    <span class="forward-mode-modal__title">逐条转发</span>
-                    <span class="forward-mode-modal__desc">每条消息都以当前用户身份单独发送，不显示“转发自”</span>
-                </button>
-                <button type="button" class="forward-mode-modal__action" :disabled="forwarding" @click="handleConfirmForwardMode('merged')">
-                    <span class="forward-mode-modal__title">合并转发</span>
-                    <span class="forward-mode-modal__desc">把这批消息打包成一条聊天记录消息发送</span>
-                </button>
-            </div>
-        </a-modal>
+        <ChatWorkspaceForwardDialogs
+            :forward-modal-open="forwardModalOpen"
+            :forward-mode-modal-open="forwardModeModalOpen"
+            :forwarding-message-count="forwardingMessageIds.length"
+            :forward-search-keyword="forwardSearchKeyword"
+            :selected-forward-target-key="selectedForwardTargetKey"
+            :forwarding="forwarding"
+            :recent-forward-targets="recentForwardTargets"
+            :filtered-forward-targets="filteredForwardTargets"
+            :forward-summary="buildForwardMessageSummary()"
+            :pending-forward-target-name="pendingForwardTarget?.name || ''"
+            :avatar-text="avatarText"
+            :modal-width="CHAT_MODAL_WIDTH_LG"
+            @update:forward-modal-open="forwardModalOpen = $event"
+            @update:forward-mode-modal-open="forwardModeModalOpen = $event"
+            @update:forward-search-keyword="forwardSearchKeyword = $event"
+            @select-target="handleSelectForwardTarget"
+            @confirm-mode="handleConfirmForwardMode"
+        />
 
         <a-modal v-model:open="groupInvitationModalOpen" title="群聊邀请" :footer="null" :width="CHAT_MODAL_WIDTH_LG">
             <div v-if="activeGroupInvitation" class="group-invitation-modal">
@@ -287,26 +282,17 @@
             </div>
         </a-modal>
 
-        <a-modal
-            v-for="viewer in chatRecordViewerStack"
-            :key="viewer.id"
-            v-model:open="viewer.open"
-            :title="viewer.record.title || '聊天记录'"
-            :footer="null"
-            :width="760"
-            @cancel="closeChatRecordViewer(viewer.id)"
-            @afterClose="removeChatRecordViewer(viewer.id)"
-        >
-            <ChatRecordViewer
-                :record="viewer.record"
-                @open-record="openChatRecordViewer"
-                @copy-entry="handleCopyChatRecordEntry"
-                @forward-entry="handleForwardChatRecordEntry"
-            />
-        </a-modal>
+        <ChatWorkspaceRecordModals
+            :viewer-stack="chatRecordViewerStack"
+            @open-record="openChatRecordViewer"
+            @close-viewer="closeChatRecordViewer"
+            @remove-viewer="removeChatRecordViewer"
+            @copy-entry="handleCopyChatRecordEntry"
+            @forward-entry="handleForwardChatRecordEntry"
+        />
 
         <a-drawer v-model:open="groupDrawerOpen" :title="settingsDrawerTitle" :width="CHAT_DRAWER_WIDTH" :body-style="drawerBodyStyle">
-            <template v-if="chatStore.activeConversation?.type === 'group'">
+            <template v-if="chatConversationState.activeConversation?.type === 'group'">
                 <section class="settings-section">
                     <div class="settings-section__title">群资料</div>
                     <div class="group-basic-panel">
@@ -314,7 +300,7 @@
                             <div class="group-summary-card">
                                 <a-upload :before-upload="handleGroupAvatarUpload" :show-upload-list="false" accept="image/*">
                                     <button type="button" class="group-summary-card__avatar">
-                                        <a-avatar :src="groupConfigForm.avatar || undefined" :size="56">{{ avatarText(groupConfigForm.name || chatStore.activeConversation.name) }}</a-avatar>
+                                        <a-avatar :src="groupConfigForm.avatar || undefined" :size="56">{{ avatarText(groupConfigForm.name || chatConversationState.activeConversation.name) }}</a-avatar>
                                     </button>
                                 </a-upload>
                                 <div class="group-summary-card__body">
@@ -323,13 +309,13 @@
                                             <a-input ref="groupNameInputRef" v-model:value="groupConfigForm.name" placeholder="群名称" :maxlength="150" class="group-summary-card__input group-summary-card__input--editing" @blur="handleGroupNameBlur" @press-enter="handleGroupNameEnter" @keydown.esc="handleGroupNameEscape" />
                                         </template>
                                         <template v-else>
-                                            <span class="group-summary-card__name">{{ groupConfigForm.name || chatStore.activeConversation.name }}</span>
+                                            <span class="group-summary-card__name">{{ groupConfigForm.name || chatConversationState.activeConversation.name }}</span>
                                         </template>
                                         <button type="button" class="group-summary-card__edit" @click="toggleGroupNameEditing">
                                             <EditOutlined />
                                         </button>
                                     </div>
-                                    <div class="group-summary-card__meta">群号 {{ chatStore.activeConversation.id }}</div>
+                                    <div class="group-summary-card__meta">群号 {{ chatConversationState.activeConversation.id }}</div>
                                 </div>
                             </div>
                             <div class="group-config-field group-config-field--inline">
@@ -358,7 +344,7 @@
                     <div class="settings-section__header-row">
                         <div class="settings-section__title">群成员</div>
                         <button type="button" class="settings-section__link-button" @click="openMemberModal()">
-                            <span>{{ chatStore.activeMembers.length }} 人</span>
+                            <span>{{ chatGroupState.activeMembers.length }} 人</span>
                             <span class="settings-section__link"><RightOutlined /></span>
                         </button>
                     </div>
@@ -398,7 +384,7 @@
                 </section>
             </template>
 
-            <template v-else-if="chatStore.activeConversation?.type === 'direct'">
+            <template v-else-if="chatConversationState.activeConversation?.type === 'direct'">
                 <section class="settings-section direct-profile-card">
                     <div class="direct-profile-card__main">
                         <a-avatar :src="directTargetUser?.avatar || undefined" :size="68">{{ avatarText(directConversationTitle) }}</a-avatar>
@@ -445,7 +431,7 @@
         </a-drawer>
 
         <a-modal v-model:open="memberModalOpen" title="群成员" :footer="null" :width="CHAT_MEMBER_MODAL_WIDTH" :body-style="tallModalBodyStyle">
-            <template v-if="chatStore.activeConversation?.type === 'group'">
+            <template v-if="chatConversationState.activeConversation?.type === 'group'">
                 <div class="entity-modal__search">
                     <a-input v-model:value="memberSearchKeyword" allow-clear placeholder="搜索群成员" />
                 </div>
@@ -490,7 +476,7 @@
         </a-modal>
 
         <a-modal v-model:open="inviteModalOpen" title="邀请好友进群" :footer="null" :width="CHAT_MODAL_WIDTH_LG" :body-style="tallModalBodyStyle">
-            <template v-if="chatStore.activeConversation?.type === 'group'">
+            <template v-if="chatConversationState.activeConversation?.type === 'group'">
                 <div class="entity-modal">
                     <div class="entity-modal__search">
                         <a-input v-model:value="inviteSearchKeyword" allow-clear placeholder="搜索好友昵称、备注或用户名" />
@@ -525,27 +511,72 @@
             @cancel="handleAvatarCropCancel"
             @confirm="handleAvatarCropConfirm"
         />
+
+        <a-modal v-model:open="assetPreviewOpen" :title="assetPreviewTitle" :footer="null" :width="CHAT_MODAL_WIDTH_LG">
+            <div v-if="previewingAssetMessage" class="asset-preview-modal">
+                <img v-if="canPreviewImage(previewingAssetMessage)" class="asset-preview-modal__image" :src="getAssetMessagePayload(previewingAssetMessage)?.url" :alt="assetPreviewTitle" />
+                <ChatVideoPlayer
+                    v-else-if="canPreviewVideo(previewingAssetMessage)"
+                    class="asset-preview-modal__video"
+                    :source-url="getAssetMessagePayload(previewingAssetMessage)?.url"
+                    :stream-url="getAssetMessagePayload(previewingAssetMessage)?.stream_url"
+                    :poster-url="getVideoPosterUrl(previewingAssetMessage)"
+                    autoplay
+                />
+            </div>
+        </a-modal>
+
+        <a-modal v-model:open="saveAssetDialogOpen" title="选择保存位置" ok-text="保存" cancel-text="取消" @ok="confirmSaveAssetToResource">
+            <div class="target-modal-toolbar">
+                <a-breadcrumb class="target-modal-toolbar__breadcrumb">
+                    <a-breadcrumb-item v-for="item in saveAssetBreadcrumbs" :key="String(item.id ?? 'root')">
+                        <a @click="openSaveAssetBreadcrumb(item.id)">{{ item.name }}</a>
+                    </a-breadcrumb-item>
+                </a-breadcrumb>
+                <a-button type="primary" ghost size="small" @click="toggleSaveAssetFolderInline">新建文件夹</a-button>
+            </div>
+            <div v-if="saveAssetCreateFolderOpen" class="target-modal-toolbar__inline">
+                <a-input v-model:value="saveAssetFolderName" placeholder="输入目录名称" @press-enter="handleCreateSaveAssetFolder" />
+                <a-button type="primary" size="small" :loading="saveAssetSaving" @click="handleCreateSaveAssetFolder">创建</a-button>
+                <a-button size="small" :disabled="saveAssetSaving" @click="toggleSaveAssetFolderInline">取消</a-button>
+            </div>
+            <a-table :columns="saveAssetColumns" :data-source="saveAssetFolderEntries" row-key="id" size="small" :pagination="false" :loading="saveAssetLoading">
+                <template #bodyCell="{ column, record }">
+                    <template v-if="column.key === 'name'">
+                        <button type="button" class="save-asset-folder-button" @click="enterSaveAssetFolder(record)">{{ record.display_name }}</button>
+                    </template>
+                </template>
+            </a-table>
+        </a-modal>
+
         <AssetPickerDialog v-model:open="assetPickerOpen" @select="handleAssetPickerSelect" />
     </main>
 </template>
 
 <script setup lang="ts">
-import { ArrowUpOutlined, EditOutlined, EllipsisOutlined, FileOutlined, MenuOutlined, PaperClipOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons-vue'
+import { ArrowUpOutlined, CaretRightFilled, EditOutlined, EllipsisOutlined, FileOutlined, MenuOutlined, PaperClipOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons-vue'
 import { Modal, message } from 'ant-design-vue'
 import type { UploadProps } from 'ant-design-vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { applyGroupInvitationApi, forwardMessagesApi, openDirectConversationApi } from '@/api/chat'
+import { applyGroupInvitationApi } from '@/api/chat'
+import { createFolderApi, getFileEntriesApi, saveChatAttachmentToResourceApi } from '@/api/upload'
 import AvatarCropModal from '@/components/AvatarCropModal.vue'
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
+import ChatWorkspaceForwardDialogs from '@/modules/chat-center/components/ChatWorkspaceForwardDialogs.vue'
+import ChatWorkspaceRecordModals from '@/modules/chat-center/components/ChatWorkspaceRecordModals.vue'
+import { useChatWorkspaceForwarding } from '@/modules/chat-center/composables/useChatWorkspaceForwarding'
+import { useChatWorkspaceRecords } from '@/modules/chat-center/composables/useChatWorkspaceRecords'
 import ChatRecordCard from '@/views/Chat/components/ChatRecordCard.vue'
-import ChatRecordViewer from '@/views/Chat/components/ChatRecordViewer.vue'
+import ChatVideoPlayer from '@/views/Chat/components/ChatVideoPlayer.vue'
+import VideoAttachmentThumbnail from '@/views/Chat/components/VideoAttachmentThumbnail.vue'
 import RichMessageComposer from '@/views/Chat/components/RichMessageComposer.vue'
 import type { RichMessageComposerExpose } from '@/views/Chat/components/RichMessageComposer.vue'
 import { useAuthStore } from '@/stores/auth'
+import { getMessageFailureDetail, getMessageFailureHint, getMessageFailureToast, getMessageFailureTooltip } from '@/stores/chat/messageFailure'
 import { useUserStore } from '@/stores/user'
 import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
-import type { ChatComposerAttachmentToken, ChatComposerSegment, ChatConversationItem, ChatConversationMemberItem, ChatFriendshipItem, ChatGroupInvitationPayload, ChatMessageAssetPayload, ChatMessageForwardedPayload, ChatMessageItem, ChatMessageRecordItem, ChatMessageRecordPayload, ChatMessageReplyPayload } from '@/types/chat'
+import type { ChatComposerAttachmentToken, ChatComposerSegment, ChatConversationMemberItem, ChatGroupInvitationPayload, ChatMessageAssetPayload, ChatMessageForwardedPayload, ChatMessageItem, ChatMessageRecordPayload, ChatMessageReplyPayload } from '@/types/chat'
 import { buildAttachmentSendPayloadFromEntry, buildAttachmentSendPayloadFromUploadResult } from '@/utils/chatAttachment'
 import { uploadFileWithCategory } from '@/utils/fileUploader'
 import { formatFileSize } from '@/utils/fileFormatter'
@@ -569,8 +600,18 @@ const {
     settingsStore,
     typingText,
 } = useChatShell()
+const chatConversationState = chatStore.state.conversationState
+const chatMessageState = chatStore.state.messageState
+const chatFriendshipState = chatStore.state.friendshipState
+const chatGroupState = chatStore.state.groupState
+const chatConversation = chatStore.conversation
+const chatMessage = chatStore.message
+const chatFriendship = chatStore.friendship
+const chatGroup = chatStore.group
 
 const assetPickerOpen = ref(false)
+const assetPreviewOpen = ref(false)
+const previewingAssetMessage = ref<ChatMessageItem | null>(null)
 const composerRef = ref<RichMessageComposerExpose | null>(null)
 const groupDrawerOpen = ref(false)
 const groupConfigSaving = ref(false)
@@ -609,29 +650,28 @@ const messageSelectionMode = ref(false)
 const selectedMessageIds = ref<number[]>([])
 const quotedMessage = ref<ChatMessageItem | null>(null)
 const composerResizeState = ref<{ startY: number; composerHeight: number } | null>(null)
-const forwardModalOpen = ref(false)
-const forwardModeModalOpen = ref(false)
-const forwardSearchKeyword = ref('')
-const selectedForwardTargetKey = ref('')
-const forwarding = ref(false)
-const forwardingMessageIds = ref<number[]>([])
-const pendingForwardTarget = ref<ForwardTargetOption | null>(null)
-const chatRecordViewerStack = ref<ChatRecordViewerItem[]>([])
 const groupInvitationModalOpen = ref(false)
 const activeInvitationMessage = ref<ChatMessageItem | null>(null)
 const groupInvitationApplying = ref(false)
+const saveAssetDialogOpen = ref(false)
+const saveAssetPendingMessage = ref<ChatMessageItem | null>(null)
+const saveAssetLoading = ref(false)
+const saveAssetSaving = ref(false)
+const saveAssetCreateFolderOpen = ref(false)
+const saveAssetFolderName = ref('')
+const saveAssetCurrentParentId = ref<number | null>(null)
+const saveAssetFolderEntries = ref<FileEntryItem[]>([])
+const saveAssetBreadcrumbs = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: '我的文件' }])
+const localAttachmentFiles = new Map<string, { file: File; objectUrl: string }>()
 let avatarTempObjectUrl = ''
 let memberSearchTimer: number | null = null
 let inviteSearchTimer: number | null = null
-let chatRecordViewerSeed = 0
 
 const COMPOSER_MIN_HEIGHT = 176
 const COMPOSER_MAX_HEIGHT = 320
 const CHAT_MEMBER_MODAL_WIDTH = 540
 const CHAT_MODAL_WIDTH_LG = 720
 const CHAT_DRAWER_WIDTH = 428
-const FORWARD_RECENT_STORAGE_KEY = 'solbot.chat.forward.recent-targets'
-const FORWARD_RECENT_LIMIT = 7
 
 const drawerBodyStyle = {
     padding: '16px',
@@ -657,41 +697,21 @@ const groupConfigForm = reactive({
 })
 
 const availableInviteFriends = computed(() => {
-    const currentMembers = new Set(chatStore.activeMembers.map((item) => item.user.id))
-    return chatStore.friends.filter((item) => !currentMembers.has(item.friend_user.id))
+    const currentMembers = new Set(chatGroupState.activeMembers.map((item) => item.user.id))
+    return chatFriendshipState.friends.filter((item) => !currentMembers.has(item.friend_user.id))
 })
 
-type ForwardTargetOption = {
-    key: string
-    targetType: 'conversation' | 'friend'
-    conversationId: number | null
-    userId: number | null
-    name: string
-    avatar: string
-    description: string
-    searchText: string
-    sortTime: string
-}
-
-type ChatRecordViewerItem = {
-    id: number
-    open: boolean
-    record: ChatMessageRecordPayload
-}
-
-const recentForwardTargetKeys = ref<string[]>([])
-
-const previewMembers = computed(() => chatStore.activeMembers.slice(0, 8))
+const previewMembers = computed(() => chatGroupState.activeMembers.slice(0, 8))
 const currentConversationMember = computed(() => {
     const currentUserId = userStore.user?.id
     if (!currentUserId) {
         return null
     }
-    return chatStore.activeMembers.find((member) => member.user.id === currentUserId) || null
+    return chatGroupState.activeMembers.find((member) => member.user.id === currentUserId) || null
 })
-const composerDisabled = computed(() => !chatStore.activeConversation?.can_send_message)
+const composerDisabled = computed(() => !chatConversationState.activeConversation?.can_send_message)
 const composerBlockedReason = computed(() => {
-    const conversation = chatStore.activeConversation
+    const conversation = chatConversationState.activeConversation
     if (!conversation || conversation.can_send_message) {
         return ''
     }
@@ -709,9 +729,9 @@ const composerBlockedReason = computed(() => {
 const filteredGroupMembers = computed(() => {
     const keyword = memberSearchTerm.value.trim().toLowerCase()
     if (!keyword) {
-        return chatStore.activeMembers
+        return chatGroupState.activeMembers
     }
-    return chatStore.activeMembers.filter((member) => buildMemberSearchText(member).includes(keyword))
+    return chatGroupState.activeMembers.filter((member) => buildMemberSearchText(member).includes(keyword))
 })
 const filteredAvailableInviteFriends = computed(() => {
     const keyword = inviteSearchTerm.value.trim().toLowerCase()
@@ -722,52 +742,52 @@ const filteredAvailableInviteFriends = computed(() => {
 })
 
 const directTargetUser = computed(() => {
-    if (chatStore.activeConversation?.type !== 'direct') {
+    if (chatConversationState.activeConversation?.type !== 'direct') {
         return null
     }
-    if (chatStore.activeConversation.direct_target?.id) {
-        return chatStore.activeConversation.direct_target
+    if (chatConversationState.activeConversation.direct_target?.id) {
+        return chatConversationState.activeConversation.direct_target
     }
-    return chatStore.friends.find((item) => item.direct_conversation?.id === chatStore.activeConversation?.id)?.friend_user || null
+    return chatFriendshipState.friends.find((item) => item.direct_conversation?.id === chatConversationState.activeConversation?.id)?.friend_user || null
 })
 
 const currentFriendship = computed(() => {
-    if (chatStore.activeConversation?.type !== 'direct') {
+    if (chatConversationState.activeConversation?.type !== 'direct') {
         return null
     }
-    return chatStore.friends.find((item) => item.direct_conversation?.id === chatStore.activeConversation?.id) || null
+    return chatFriendshipState.friends.find((item) => item.direct_conversation?.id === chatConversationState.activeConversation?.id) || null
 })
 
 const isSelfDirectConversation = computed(() => {
-    if (chatStore.activeConversation?.type !== 'direct') {
+    if (chatConversationState.activeConversation?.type !== 'direct') {
         return false
     }
     const currentUserId = userStore.user?.id
     if (!currentUserId) {
         return false
     }
-    if (chatStore.activeConversation.direct_target?.id === currentUserId) {
+    if (chatConversationState.activeConversation.direct_target?.id === currentUserId) {
         return true
     }
-    return chatStore.activeConversation.member_count === 1
+    return chatConversationState.activeConversation.member_count === 1
 })
 
 const isDirectFriend = computed(() => {
-    if (!chatStore.activeConversation || chatStore.activeConversation.type !== 'direct') {
+    if (!chatConversationState.activeConversation || chatConversationState.activeConversation.type !== 'direct') {
         return false
     }
     if (isSelfDirectConversation.value) {
         return true
     }
-    return chatStore.friends.some((item) => item.direct_conversation?.id === chatStore.activeConversation?.id)
+    return chatFriendshipState.friends.some((item) => item.direct_conversation?.id === chatConversationState.activeConversation?.id)
 })
 
 const showDirectActions = computed(
-    () => chatStore.activeConversation?.type === 'direct' && chatStore.activeConversation.access_mode === 'member' && !isDirectFriend.value && Boolean(directTargetUser.value),
+    () => chatConversationState.activeConversation?.type === 'direct' && chatConversationState.activeConversation.access_mode === 'member' && !isDirectFriend.value && Boolean(directTargetUser.value),
 )
-const showSettingsTrigger = computed(() => Boolean(chatStore.activeConversation && chatStore.activeConversation.access_mode === 'member'))
-const settingsDrawerTitle = computed(() => (chatStore.activeConversation?.type === 'group' ? '群聊设置' : '会话设置'))
-const directConversationTitle = computed(() => currentFriendship.value?.remark || directTargetUser.value?.display_name || directTargetUser.value?.username || chatStore.activeConversation?.name || '私聊')
+const showSettingsTrigger = computed(() => Boolean(chatConversationState.activeConversation && chatConversationState.activeConversation.access_mode === 'member'))
+const settingsDrawerTitle = computed(() => (chatConversationState.activeConversation?.type === 'group' ? '群聊设置' : '会话设置'))
+const directConversationTitle = computed(() => currentFriendship.value?.remark || directTargetUser.value?.display_name || directTargetUser.value?.username || chatConversationState.activeConversation?.name || '私聊')
 const groupNicknamePreview = computed(() => trimText(groupNicknameInput.value) || userStore.user?.display_name || userStore.user?.username || '未设置')
 const sendShortcutLabel = computed(() => (settingsStore.chatSendHotkey === 'enter' ? 'Enter' : 'Ctrl + Enter'))
 const composerPlaceholder = computed(() => composerBlockedReason.value || `输入文本消息，按 ${sendShortcutLabel.value} 发送`)
@@ -781,8 +801,10 @@ const muteDurationOptions = [
     { minutes: 60 * 24 * 7, label: '禁言 7 天' },
 ]
 
+const saveAssetColumns = [{ title: '目录', dataIndex: 'display_name', key: 'name' }]
+
 const getAttachmentSendGuardMessage = () => {
-    const activeConversation = chatStore.activeConversation
+    const activeConversation = chatConversationState.activeConversation
     if (composerBlockedReason.value) {
         return composerBlockedReason.value
     }
@@ -821,220 +843,6 @@ const buildFriendSearchText = (friend: (typeof availableInviteFriends.value)[num
     return `${friend.remark || ''} ${friend.friend_user.display_name || ''} ${friend.friend_user.username || ''}`.toLowerCase()
 }
 
-const loadRecentForwardTargetKeys = () => {
-    if (typeof window === 'undefined') {
-        return []
-    }
-    try {
-        const rawValue = window.localStorage.getItem(FORWARD_RECENT_STORAGE_KEY)
-        if (!rawValue) {
-            return []
-        }
-        const parsed = JSON.parse(rawValue)
-        if (!Array.isArray(parsed)) {
-            return []
-        }
-        return parsed.filter((item): item is string => typeof item === 'string').slice(0, FORWARD_RECENT_LIMIT)
-    } catch {
-        return []
-    }
-}
-
-const persistRecentForwardTarget = (targetKey: string) => {
-    recentForwardTargetKeys.value = [targetKey, ...recentForwardTargetKeys.value.filter((item) => item !== targetKey)].slice(0, FORWARD_RECENT_LIMIT)
-    if (typeof window === 'undefined') {
-        return
-    }
-    window.localStorage.setItem(FORWARD_RECENT_STORAGE_KEY, JSON.stringify(recentForwardTargetKeys.value))
-}
-
-const buildForwardMessageSummary = () => {
-    if (forwardingMessageIds.value.length > 1) {
-        return `${forwardingMessageIds.value.length} 条消息`
-    }
-    const currentMessage = chatStore.activeMessages.find((item) => item.id === forwardingMessageIds.value[0]) || messageMenuMessage.value
-    const preview = trimText(currentMessage ? getMessageQuotePreview(currentMessage) : '这条消息')
-    return `“${preview.length > 22 ? `${preview.slice(0, 22)}...` : preview || '这条消息'}”`
-}
-
-const buildChatRecordPlainText = (record: ChatMessageRecordPayload | null) => {
-    if (!record) {
-        return '聊天记录'
-    }
-    const lines = (record.items || []).map((entry) => {
-        if (entry.message_type === 'image') {
-            return `${entry.sender_name}: [图片]`
-        }
-        if (entry.message_type === 'file') {
-            return `${entry.sender_name}: [文件]`
-        }
-        if (entry.message_type === 'chat_record') {
-            return `${entry.sender_name}: [聊天记录]`
-        }
-        return `${entry.sender_name}: ${trimText((entry.content || '').replace(/\s+/g, ' ')) || '空消息'}`
-    })
-    return [record.title || '聊天记录', ...lines].join('\n')
-}
-
-const resolveForwardTargetConversationId = async (target: ForwardTargetOption) => {
-    if (target.conversationId) {
-        return target.conversationId
-    }
-    if (target.targetType !== 'friend' || !target.userId) {
-        throw new Error('无法识别转发目标')
-    }
-    const { data } = await openDirectConversationApi(target.userId)
-    await Promise.all([chatStore.loadConversations(), chatStore.loadFriends()])
-    return data.conversation.id
-}
-
-const confirmForwardSelection = (target: ForwardTargetOption) => {
-    return new Promise<boolean>((resolve) => {
-        let settled = false
-        Modal.confirm({
-            title: '确认转发',
-            content: `是否将${buildForwardMessageSummary()}发送给${target.name}${target.targetType === 'friend' ? '用户' : ''}`,
-            okText: '确认',
-            cancelText: '取消',
-            onOk: () => {
-                settled = true
-                resolve(true)
-            },
-            onCancel: () => {
-                settled = true
-                resolve(false)
-            },
-            afterClose: () => {
-                if (!settled) {
-                    resolve(false)
-                }
-            },
-        })
-    })
-}
-
-const submitForward = async (target: ForwardTargetOption, forwardMode: 'separate' | 'merged') => {
-    forwarding.value = true
-    forwardModalOpen.value = false
-    forwardModeModalOpen.value = false
-    try {
-        const targetConversationId = await resolveForwardTargetConversationId(target)
-        await forwardMessagesApi({
-            target_conversation_id: targetConversationId,
-            message_ids: forwardingMessageIds.value,
-            forward_mode: forwardMode,
-        })
-        persistRecentForwardTarget(target.key)
-        selectedForwardTargetKey.value = ''
-        forwardingMessageIds.value = []
-        pendingForwardTarget.value = null
-        clearMessageSelection()
-        closeMessageMenu()
-        message.success('转发成功')
-    } catch (error: unknown) {
-        message.error(getErrorMessage(error, '转发失败'))
-    } finally {
-        forwarding.value = false
-    }
-}
-
-const openForwardModal = async () => {
-    try {
-        await Promise.all([chatStore.loadConversations(), chatStore.loadFriends()])
-        recentForwardTargetKeys.value = loadRecentForwardTargetKeys().filter((key) => allForwardTargets.value.some((item) => item.key === key))
-        forwardSearchKeyword.value = ''
-        selectedForwardTargetKey.value = ''
-        forwardModalOpen.value = true
-    } catch (error: unknown) {
-        message.error(getErrorMessage(error, '加载转发目标失败'))
-    }
-}
-
-const handleSelectForwardTarget = async (target: ForwardTargetOption) => {
-    if (!forwardingMessageIds.value.length || forwarding.value) {
-        return
-    }
-    selectedForwardTargetKey.value = target.key
-    if (forwardingMessageIds.value.length > 1) {
-        pendingForwardTarget.value = target
-        forwardModeModalOpen.value = true
-        return
-    }
-    const confirmed = await confirmForwardSelection(target)
-    if (!confirmed) {
-        return
-    }
-    await submitForward(target, 'separate')
-}
-
-const handleConfirmForwardMode = (forwardMode: 'separate' | 'merged') => {
-    if (!pendingForwardTarget.value || forwarding.value) {
-        return
-    }
-    void submitForward(pendingForwardTarget.value, forwardMode)
-}
-
-const buildForwardConversationTarget = (conversation: ChatConversationItem): ForwardTargetOption => ({
-    key: `conversation:${conversation.id}`,
-    targetType: 'conversation',
-    conversationId: conversation.id,
-    userId: conversation.direct_target?.id || null,
-    name: conversation.name,
-    avatar: conversation.avatar || conversation.direct_target?.avatar || '',
-    description: conversation.last_message_preview || (conversation.type === 'group' ? '群聊' : '私聊'),
-    searchText: `${conversation.name} ${conversation.last_message_preview || ''} ${conversation.direct_target?.display_name || ''} ${conversation.direct_target?.username || ''}`.toLowerCase(),
-    sortTime: conversation.last_message_at || '',
-})
-
-const buildForwardFriendTarget = (friend: ChatFriendshipItem): ForwardTargetOption => ({
-    key: `friend:${friend.friend_user.id}`,
-    targetType: 'friend',
-    conversationId: friend.direct_conversation?.id || null,
-    userId: friend.friend_user.id,
-    name: friend.remark || friend.friend_user.display_name || friend.friend_user.username,
-    avatar: friend.friend_user.avatar || '',
-    description: friend.friend_user.username,
-    searchText: `${friend.remark || ''} ${friend.friend_user.display_name || ''} ${friend.friend_user.username || ''}`.toLowerCase(),
-    sortTime: friend.accepted_at || '',
-})
-
-const allForwardTargets = computed<ForwardTargetOption[]>(() => {
-    const targetMap = new Map<string, ForwardTargetOption>()
-    for (const conversation of chatStore.conversations) {
-        if (conversation.access_mode !== 'member' || !conversation.can_send_message) {
-            continue
-        }
-        const target = buildForwardConversationTarget(conversation)
-        targetMap.set(target.key, target)
-    }
-    for (const friend of chatStore.friends) {
-        const target = buildForwardFriendTarget(friend)
-        if (target.conversationId) {
-            const existingKey = `conversation:${target.conversationId}`
-            if (targetMap.has(existingKey)) {
-                continue
-            }
-        }
-        targetMap.set(target.key, target)
-    }
-    return Array.from(targetMap.values()).sort((left, right) => {
-        if (left.sortTime === right.sortTime) {
-            return left.name.localeCompare(right.name, 'zh-CN')
-        }
-        return right.sortTime.localeCompare(left.sortTime)
-    })
-})
-
-const recentForwardTargets = computed(() => recentForwardTargetKeys.value.map((key) => allForwardTargets.value.find((item) => item.key === key)).filter(Boolean) as ForwardTargetOption[])
-
-const filteredForwardTargets = computed(() => {
-    const keyword = forwardSearchKeyword.value.trim().toLowerCase()
-    if (!keyword) {
-        return allForwardTargets.value
-    }
-    return allForwardTargets.value.filter((item) => item.searchText.includes(keyword))
-})
-
 const scheduleSearchSync = (keyword: string, assign: (value: string) => void, timerKey: 'member' | 'invite') => {
     const normalized = keyword.trim()
     const currentTimer = timerKey === 'member' ? memberSearchTimer : inviteSearchTimer
@@ -1063,11 +871,11 @@ const openMemberModal = () => {
 }
 
 const openInviteModal = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.loadFriends()
+        await chatFriendship.loadFriends()
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载好友列表失败'))
         return
@@ -1089,7 +897,7 @@ const getAssetMessagePayload = (messageItem: ChatMessageItem): ChatMessageAssetP
         return null
     }
     const payload = messageItem.payload as Partial<ChatMessageAssetPayload>
-    if (!payload || (!payload.asset_reference_id && !payload.source_asset_reference_id && !payload.url)) {
+    if (!payload || (!payload.asset_reference_id && !payload.source_asset_reference_id && !payload.url && !payload.local_upload_id)) {
         return null
     }
     return payload as ChatMessageAssetPayload
@@ -1113,16 +921,45 @@ const getAssetDisplayName = (messageItem: ChatMessageItem) => getAssetMessagePay
 
 const canPreviewImage = (messageItem: ChatMessageItem) => messageItem.message_type === 'image' && Boolean(getAssetMessagePayload(messageItem)?.url)
 
+const canPreviewVideo = (messageItem: ChatMessageItem) => {
+    if (messageItem.message_type !== 'file') {
+        return false
+    }
+    const payload = getAssetMessagePayload(messageItem)
+    const mediaType = String(payload?.media_type || '').trim().toLowerCase()
+    const mimeType = String(payload?.mime_type || '').trim().toLowerCase()
+    return Boolean(payload?.url || payload?.stream_url) && (mediaType === 'video' || mimeType.startsWith('video/'))
+}
+
+const getVideoPosterUrl = (messageItem: ChatMessageItem) => {
+    const payload = getAssetMessagePayload(messageItem)
+    return payload?.thumbnail_url || ''
+}
+
+const getAssetPreviewImageUrl = (messageItem: ChatMessageItem) => getAssetMessagePayload(messageItem)?.url || ''
+
+const getAssetUploadProgress = (messageItem: ChatMessageItem) => {
+    const progress = Number(getAssetMessagePayload(messageItem)?.upload_progress || 0)
+    return Math.min(100, Math.max(0, Math.round(progress)))
+}
+
+const isAssetUploading = (messageItem: ChatMessageItem) => {
+    const payload = getAssetMessagePayload(messageItem)
+    return messageItem.local_status === 'sending' && payload?.upload_phase === 'uploading'
+}
+
+const showVideoPlayOverlay = (messageItem: ChatMessageItem) => canPreviewVideo(messageItem) && !isAssetUploading(messageItem)
+
 const formatAssetFileSize = (messageItem: ChatMessageItem) => {
     const fileSize = Number(getAssetMessagePayload(messageItem)?.file_size || 0)
     return fileSize > 0 ? formatFileSize(fileSize) : '大小未知'
 }
 
-const showGroupSenderLine = (messageItem: ChatMessageItem) => chatStore.activeConversation?.type === 'group' && !messageItem.is_system
+const showGroupSenderLine = (messageItem: ChatMessageItem) => chatConversationState.activeConversation?.type === 'group' && !messageItem.is_system
 
 const getSenderLabel = (messageItem: ChatMessageItem) => {
-    if (chatStore.activeConversation?.type === 'group') {
-        const member = chatStore.activeMembers.find((item) => item.user.id === messageItem.sender?.id)
+    if (chatConversationState.activeConversation?.type === 'group') {
+        const member = chatGroupState.activeMembers.find((item) => item.user.id === messageItem.sender?.id)
         if (member?.group_nickname) {
             return member.group_nickname
         }
@@ -1141,8 +978,52 @@ const getReplyPayload = (messageItem: ChatMessageItem) => {
     return payload.reply_to_message || null
 }
 
+const getRevokedPayload = (messageItem: ChatMessageItem) => {
+    const payload = messageItem.payload as { revoked?: Record<string, unknown> }
+    const revoked = payload.revoked
+    if (!revoked || typeof revoked !== 'object' || !revoked.revoked_at) {
+        return null
+    }
+    return revoked as {
+        revoked_at: string
+        revoked_by_user_id: number | null
+        can_restore_once?: boolean
+        restore_used?: boolean
+    }
+}
+
+const isRevokedMessage = (messageItem: ChatMessageItem) => Boolean(getRevokedPayload(messageItem))
+
+const canRestoreRevokedMessage = (messageItem: ChatMessageItem) => {
+    const revoked = getRevokedPayload(messageItem)
+    if (!revoked || !isSelfMessage(messageItem)) {
+        return false
+    }
+    return Boolean(revoked.can_restore_once) && !Boolean(revoked.restore_used)
+}
+
+const canRevokeMessage = (messageItem: ChatMessageItem | null) => {
+    if (!messageItem || messageItem.is_system || !isSelfMessage(messageItem) || messageItem.local_status === 'failed' || isRevokedMessage(messageItem)) {
+        return false
+    }
+    const createdAt = new Date(messageItem.created_at).getTime()
+    if (!createdAt) {
+        return false
+    }
+    return Date.now() - createdAt <= 120000
+}
+
+const canDeleteMessage = (messageItem: ChatMessageItem | null) => {
+    if (!messageItem || messageItem.is_system || messageItem.local_status === 'failed') {
+        return false
+    }
+    return chatConversationState.activeConversation?.access_mode === 'member'
+}
+
+const assetPreviewTitle = computed(() => (previewingAssetMessage.value ? getAssetDisplayName(previewingAssetMessage.value) : '媒体预览'))
+
 const handleReplyJump = async (replyPayload: ChatMessageReplyPayload) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     const located = await scrollToSequence(replyPayload.sequence)
@@ -1150,7 +1031,7 @@ const handleReplyJump = async (replyPayload: ChatMessageReplyPayload) => {
         return
     }
     try {
-        await chatStore.loadMessages(chatStore.activeConversationId, { around_sequence: replyPayload.sequence, limit: 30 })
+        await chatMessage.loadMessages(chatConversationState.activeConversationId, { around_sequence: replyPayload.sequence, limit: 30 })
         const loaded = await scrollToSequence(replyPayload.sequence)
         if (!loaded) {
             message.info('未找到引用消息')
@@ -1173,12 +1054,16 @@ const getGroupInvitationPayload = (messageItem: ChatMessageItem) => {
 const activeGroupInvitation = computed(() => (activeInvitationMessage.value ? getGroupInvitationPayload(activeInvitationMessage.value) : null))
 
 const buildComposerAttachmentToken = (options: {
-    sourceAssetReferenceId: number
+    sourceAssetReferenceId?: number
     displayName: string
     mediaType: string
     mimeType?: string
     fileSize?: number
     url?: string
+    streamUrl?: string
+    thumbnailUrl?: string
+    processingStatus?: string
+    localUploadId?: string
 }): ChatComposerAttachmentToken => ({
     token_id: `composer_attachment_${Date.now()}_${Math.random().toString(16).slice(2)}`,
     source_asset_reference_id: options.sourceAssetReferenceId,
@@ -1187,6 +1072,10 @@ const buildComposerAttachmentToken = (options: {
     mime_type: options.mimeType || '',
     file_size: options.fileSize,
     url: options.url || '',
+    stream_url: options.streamUrl || '',
+    thumbnail_url: options.thumbnailUrl || '',
+    processing_status: options.processingStatus || '',
+    local_upload_id: options.localUploadId,
 })
 
 const buildAttachmentClipboardHtml = (messageItem: ChatMessageItem) => {
@@ -1199,6 +1088,8 @@ const buildAttachmentClipboardHtml = (messageItem: ChatMessageItem) => {
 }
 
 const hasAssetUrl = (messageItem: ChatMessageItem) => Boolean(getAssetMessagePayload(messageItem)?.url)
+
+const hasAssetPlaybackSource = (messageItem: ChatMessageItem) => Boolean(getAssetMessagePayload(messageItem)?.stream_url || getAssetMessagePayload(messageItem)?.url)
 
 const hasMessageBubbleAction = (messageItem: ChatMessageItem) => Boolean(getGroupInvitationPayload(messageItem) || hasAssetUrl(messageItem) || isChatRecordMessage(messageItem))
 
@@ -1226,15 +1117,32 @@ const triggerAssetDownload = (messageItem: ChatMessageItem) => {
     document.body.removeChild(link)
 }
 
+const loadSaveAssetFolders = async (parentId?: number | null) => {
+    saveAssetLoading.value = true
+    try {
+        const { data } = await getFileEntriesApi(parentId ?? null)
+        saveAssetCurrentParentId.value = parentId ?? null
+        saveAssetBreadcrumbs.value = data.breadcrumbs
+        saveAssetFolderEntries.value = data.items.filter((item) => item.is_dir && !item.is_recycle_bin)
+    } finally {
+        saveAssetLoading.value = false
+    }
+}
+
+const openPreviewableAsset = (messageItem: ChatMessageItem) => {
+    previewingAssetMessage.value = messageItem
+    assetPreviewOpen.value = true
+}
+
 const openAssetMessage = (messageItem: ChatMessageItem) => {
-    if (!hasAssetUrl(messageItem)) {
+    if (!hasAssetPlaybackSource(messageItem)) {
         return
     }
     if (!isPreviewableAssetMessage(messageItem)) {
         triggerAssetDownload(messageItem)
         return
     }
-    window.open(getAssetMessagePayload(messageItem)?.url, '_blank', 'noopener,noreferrer')
+    openPreviewableAsset(messageItem)
 }
 
 const openGroupInvitationModal = (messageItem: ChatMessageItem) => {
@@ -1255,27 +1163,6 @@ const handleMessageBubbleClick = (messageItem: ChatMessageItem) => {
         return
     }
     openAssetMessage(messageItem)
-}
-
-const openChatRecordViewer = (record: ChatMessageRecordPayload) => {
-    chatRecordViewerSeed += 1
-    chatRecordViewerStack.value = [...chatRecordViewerStack.value, { id: chatRecordViewerSeed, open: true, record }]
-}
-
-const openChatRecordViewerFromMessage = (messageItem: ChatMessageItem) => {
-    const record = getChatRecordPayload(messageItem)
-    if (!record) {
-        return
-    }
-    openChatRecordViewer(record)
-}
-
-const closeChatRecordViewer = (viewerId: number) => {
-    chatRecordViewerStack.value = chatRecordViewerStack.value.map((viewer) => (viewer.id === viewerId ? { ...viewer, open: false } : viewer))
-}
-
-const removeChatRecordViewer = (viewerId: number) => {
-    chatRecordViewerStack.value = chatRecordViewerStack.value.filter((viewer) => viewer.id !== viewerId)
 }
 
 const isMessageSelected = (messageId: number) => selectedMessageIds.value.includes(messageId)
@@ -1310,40 +1197,92 @@ const getMessageQuotePreview = (messageItem: ChatMessageItem) => {
     return trimText(messageItem.content) || '空消息'
 }
 
-const buildChatRecordEntryCopyText = (entry: ChatMessageRecordItem) => {
-    if (entry.message_type === 'chat_record') {
-        return buildChatRecordPlainText(entry.chat_record || null)
-    }
-    if (entry.message_type === 'image') {
-        return [entry.asset?.display_name || '[图片]', entry.asset?.url || ''].filter(Boolean).join('\n')
-    }
-    if (entry.message_type === 'file') {
-        return [entry.asset?.display_name || '[文件]', entry.asset?.url || ''].filter(Boolean).join('\n')
-    }
-    return entry.content || '空消息'
-}
-
-const handleCopyChatRecordEntry = async (entry: ChatMessageRecordItem) => {
-    try {
-        await navigator.clipboard.writeText(buildChatRecordEntryCopyText(entry))
-        message.success('消息已复制')
-    } catch {
-        message.error('复制失败')
-    }
-}
-
-const handleForwardChatRecordEntry = (entry: ChatMessageRecordItem) => {
-    if (!entry.source_message_id) {
-        message.warning('该条聊天记录暂不支持转发')
-        return
-    }
-    forwardingMessageIds.value = [entry.source_message_id]
-    void openForwardModal()
-}
-
 const closeMessageMenu = () => {
     messageMenuOpen.value = false
     messageMenuMessage.value = null
+}
+
+const {
+    forwardModalOpen,
+    forwardModeModalOpen,
+    forwardSearchKeyword,
+    selectedForwardTargetKey,
+    forwarding,
+    forwardingMessageIds,
+    pendingForwardTarget,
+    recentForwardTargets,
+    filteredForwardTargets,
+    buildForwardMessageSummary,
+    beginForwardSelection,
+    handleSelectForwardTarget,
+    handleConfirmForwardMode,
+    resetForwardingState,
+} = useChatWorkspaceForwarding({
+    chatStore,
+    getMessageQuotePreview,
+    resolveMenuMessage: () => messageMenuMessage.value,
+    clearMessageSelection,
+    closeMessageMenu,
+})
+
+const {
+    chatRecordViewerStack,
+    buildChatRecordPlainText,
+    openChatRecordViewer,
+    openChatRecordViewerFromMessage,
+    closeChatRecordViewer,
+    removeChatRecordViewer,
+    handleCopyChatRecordEntry,
+    handleForwardChatRecordEntry,
+    clearChatRecordViewers,
+} = useChatWorkspaceRecords({
+    getChatRecordPayload,
+    beginForwardSelection,
+})
+
+const rememberLocalAttachmentFile = (file: File) => {
+    const localUploadId = `local_upload_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const objectUrl = URL.createObjectURL(file)
+    localAttachmentFiles.set(localUploadId, { file, objectUrl })
+    return { localUploadId, objectUrl }
+}
+
+const releaseLocalAttachmentFile = (localUploadId?: string) => {
+    if (!localUploadId) {
+        return
+    }
+    const target = localAttachmentFiles.get(localUploadId)
+    if (!target) {
+        return
+    }
+    URL.revokeObjectURL(target.objectUrl)
+    localAttachmentFiles.delete(localUploadId)
+}
+
+const insertLocalFilesIntoComposer = (files: File[]) => {
+    for (const file of files) {
+        const { localUploadId, objectUrl } = rememberLocalAttachmentFile(file)
+        composerRef.value?.insertAttachment(buildComposerAttachmentToken({
+            displayName: file.name,
+            mediaType: file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'file',
+            mimeType: file.type || '',
+            fileSize: file.size,
+            url: objectUrl,
+            localUploadId,
+        }))
+    }
+}
+
+const handleComposerPasteFiles = async (files: File[]) => {
+    const guardMessage = getAttachmentSendGuardMessage()
+    if (guardMessage) {
+        message.warning(guardMessage)
+        return
+    }
+    if (!files.length) {
+        return
+    }
+    insertLocalFilesIntoComposer(files)
 }
 
 const handleDocumentClick = () => {
@@ -1351,10 +1290,10 @@ const handleDocumentClick = () => {
 }
 
 const syncGroupConfigForm = () => {
-    const config = chatStore.activeConversation?.group_config
+    const config = chatConversationState.activeConversation?.group_config
     groupNameEditing.value = false
-    groupConfigForm.name = chatStore.activeConversation?.name || ''
-    groupConfigForm.avatar = chatStore.activeConversation?.avatar || ''
+    groupConfigForm.name = chatConversationState.activeConversation?.name || ''
+    groupConfigForm.avatar = chatConversationState.activeConversation?.avatar || ''
     groupConfigForm.join_approval_required = config?.join_approval_required ?? true
     groupConfigForm.allow_member_invite = config?.allow_member_invite ?? true
     groupConfigForm.mute_all = config?.mute_all ?? false
@@ -1362,9 +1301,9 @@ const syncGroupConfigForm = () => {
 }
 
 const syncPreferenceForm = () => {
-    muteNotifications.value = chatStore.activeConversation?.member_settings?.mute_notifications ?? false
-    pinnedConversation.value = chatStore.activeConversation?.is_pinned ?? false
-    groupNicknameInput.value = chatStore.activeConversation?.member_settings?.group_nickname || ''
+    muteNotifications.value = chatConversationState.activeConversation?.member_settings?.mute_notifications ?? false
+    pinnedConversation.value = chatConversationState.activeConversation?.is_pinned ?? false
+    groupNicknameInput.value = chatConversationState.activeConversation?.member_settings?.group_nickname || ''
     directRemark.value = currentFriendship.value?.remark || ''
     directRemarkEditing.value = false
 }
@@ -1425,15 +1364,15 @@ const scrollToSequence = async (sequence: number) => {
 }
 
 const syncActiveConversation = async () => {
-    const conversationId = chatStore.activeConversationId
+    const conversationId = chatConversationState.activeConversationId
     if (!conversationId) {
         return
     }
     try {
-        if (chatStore.activeConversation?.type === 'group') {
-            await chatStore.loadMembers(conversationId)
+        if (chatConversationState.activeConversation?.type === 'group') {
+            await chatGroup.loadMembers(conversationId)
         }
-        if (!chatStore.focusedSequenceMap[conversationId]) {
+        if (!chatConversationState.focusedSequenceMap[conversationId]) {
             await scrollToBottom()
         }
     } catch (error: unknown) {
@@ -1457,16 +1396,67 @@ const handleSendMessage = async () => {
     try {
         for (const segment of segments) {
             if (segment.kind === 'text') {
-                await chatStore.sendTextMessage(segment.text, quotedMessageId)
+                await chatMessage.sendTextMessage(segment.text, quotedMessageId)
                 continue
             }
-            await chatStore.sendAttachmentMessage({
+            const localUploadId = segment.attachment.local_upload_id
+            if (localUploadId) {
+                const pendingLocalAttachment = localAttachmentFiles.get(localUploadId)
+                if (!pendingLocalAttachment) {
+                    throw new Error('本地附件已失效，请重新选择后再发送')
+                }
+                await chatMessage.sendAttachmentMessage({
+                    displayName: segment.attachment.display_name,
+                    mediaType: segment.attachment.media_type,
+                    mimeType: segment.attachment.mime_type,
+                    fileSize: segment.attachment.file_size,
+                    url: pendingLocalAttachment.objectUrl,
+                    quotedMessageId,
+                    uploadBeforeSend: async (updateProgress) => {
+                        if (!authStore.accessToken) {
+                            throw new Error('登录状态无效，无法发送附件')
+                        }
+                        const result = await uploadFileWithCategory({
+                            file: pendingLocalAttachment.file,
+                            category: 'chat',
+                            token: authStore.accessToken,
+                            onHashProgress: (progress) => {
+                                updateProgress({ upload_progress: Math.floor(progress * 0.2), upload_phase: 'uploading' })
+                            },
+                            onChunkProgress: (progress) => {
+                                updateProgress({ upload_progress: 20 + Math.floor(progress * 0.5), upload_phase: 'uploading' })
+                            },
+                            onMergeProgress: (progress) => {
+                                updateProgress({ upload_progress: 70 + Math.floor(progress * 0.3), upload_phase: 'uploading' })
+                            },
+                        })
+                        const payload = buildAttachmentSendPayloadFromUploadResult(result, pendingLocalAttachment.file)
+                        releaseLocalAttachmentFile(localUploadId)
+                        return {
+                            sourceAssetReferenceId: payload.sourceAssetReferenceId,
+                            displayName: payload.displayName,
+                            mediaType: payload.mediaType,
+                            mimeType: payload.mimeType,
+                            fileSize: payload.fileSize,
+                            url: payload.url,
+                            streamUrl: payload.streamUrl,
+                            thumbnailUrl: payload.thumbnailUrl,
+                            processingStatus: payload.processingStatus,
+                        }
+                    },
+                })
+                continue
+            }
+            await chatMessage.sendAttachmentMessage({
                 sourceAssetReferenceId: segment.attachment.source_asset_reference_id,
                 displayName: segment.attachment.display_name,
                 mediaType: segment.attachment.media_type,
                 mimeType: segment.attachment.mime_type,
                 fileSize: segment.attachment.file_size,
                 url: segment.attachment.url,
+                streamUrl: segment.attachment.stream_url,
+                thumbnailUrl: segment.attachment.thumbnail_url,
+                processingStatus: segment.attachment.processing_status,
                 quotedMessageId,
             })
         }
@@ -1475,7 +1465,7 @@ const handleSendMessage = async () => {
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '发送消息失败'))
     } finally {
-        chatStore.sendTyping(false)
+        chatMessage.sendTyping(false)
     }
 }
 
@@ -1496,7 +1486,7 @@ const openResourceAttachmentPicker = async () => {
         message.warning(guardMessage)
         return
     }
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         message.warning('请先选择会话')
         return
     }
@@ -1513,6 +1503,9 @@ const handleAssetPickerSelect = async (item: FileEntryItem | SearchFileEntryItem
             mimeType: payload.mimeType,
             fileSize: payload.fileSize,
             url: payload.url,
+            streamUrl: payload.streamUrl,
+            thumbnailUrl: payload.thumbnailUrl,
+            processingStatus: payload.processingStatus,
         }))
         message.success('附件已加入输入框')
     } catch (error: unknown) {
@@ -1545,42 +1538,15 @@ const handleAttachmentSelection = async (event: Event) => {
         message.warning(guardMessage)
         return
     }
-    if (!authStore.accessToken) {
-        message.error('登录状态无效，无法发送附件')
-        return
-    }
-
-    attachmentUploading.value = true
-    let successCount = 0
-    try {
-        for (const file of files) {
-            const result = await uploadFileWithCategory({
-                file,
-                token: authStore.accessToken,
-            })
-            const payload = buildAttachmentSendPayloadFromUploadResult(result, file)
-            composerRef.value?.insertAttachment(buildComposerAttachmentToken({
-                sourceAssetReferenceId: payload.sourceAssetReferenceId,
-                displayName: payload.displayName,
-                mediaType: payload.mediaType,
-                mimeType: payload.mimeType,
-                fileSize: payload.fileSize,
-                url: payload.url,
-            }))
-            successCount += 1
-        }
-        if (successCount > 0) {
-            message.success(successCount === 1 ? '附件已加入输入框' : `已加入 ${successCount} 个附件`)
-        }
-    } catch (error: unknown) {
-        message.error(getErrorMessage(error, '加入附件失败'))
-    } finally {
-        attachmentUploading.value = false
-    }
+    insertLocalFilesIntoComposer(files)
+    message.success(files.length === 1 ? '附件已加入输入框' : `已加入 ${files.length} 个附件`)
 }
 
 const handleComposerTypingChange = (hasContent: boolean) => {
-    chatStore.sendTyping(hasContent)
+    if (chatConversationState.activeConversation?.type !== 'direct') {
+        return
+    }
+    chatMessage.sendTyping(hasContent)
     stopTypingSoon()
 }
 
@@ -1589,19 +1555,19 @@ const stopTypingSoon = () => {
         window.clearTimeout(typingStopTimer.value)
     }
     typingStopTimer.value = window.setTimeout(() => {
-        chatStore.sendTyping(false)
+        chatMessage.sendTyping(false)
     }, 1200)
 }
 
 const handleLoadOlderMessages = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     const container = messageContainerRef.value
     const previousHeight = container?.scrollHeight || 0
     const previousTop = container?.scrollTop || 0
     try {
-        await chatStore.loadOlderMessages(chatStore.activeConversationId)
+        await chatMessage.loadOlderMessages(chatConversationState.activeConversationId)
         await nextTick()
         if (container) {
             container.scrollTop = container.scrollHeight - previousHeight + previousTop
@@ -1612,11 +1578,11 @@ const handleLoadOlderMessages = async () => {
 }
 
 const handleLeaveConversation = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.leaveConversation(chatStore.activeConversationId)
+        await chatGroup.leaveConversation(chatConversationState.activeConversationId)
         groupDrawerOpen.value = false
         message.success('已退出群聊')
         await router.replace({ name: 'ChatMessages' })
@@ -1630,7 +1596,7 @@ const handleAddFriend = async () => {
         return
     }
     try {
-        await chatStore.submitFriendRequest(directTargetUser.value.id)
+        await chatFriendship.submitFriendRequest(directTargetUser.value.id)
         message.success('好友申请已发送')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '发送好友申请失败'))
@@ -1638,15 +1604,15 @@ const handleAddFriend = async () => {
 }
 
 const openSettingsDrawer = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     groupDrawerOpen.value = true
     try {
-        if (chatStore.activeConversation?.type === 'group') {
-            await Promise.all([chatStore.loadMembers(chatStore.activeConversationId), chatStore.loadFriends()])
+        if (chatConversationState.activeConversation?.type === 'group') {
+            await Promise.all([chatGroup.loadMembers(chatConversationState.activeConversationId), chatFriendship.loadFriends()])
         } else {
-            await chatStore.loadFriends()
+            await chatFriendship.loadFriends()
         }
         syncGroupConfigForm()
         syncPreferenceForm()
@@ -1678,7 +1644,7 @@ const handleAvatarCropCancel = () => {
 }
 
 const handleAvatarCropConfirm = async (avatarFile: File) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         clearCropState()
         return
     }
@@ -1695,7 +1661,7 @@ const handleAvatarCropConfirm = async (avatarFile: File) => {
             token: authStore.accessToken,
         })
         groupConfigForm.avatar = result.url
-        await chatStore.updateGroupConfig(chatStore.activeConversationId, { avatar: result.url })
+        await chatConversation.updateGroupConfig(chatConversationState.activeConversationId, { avatar: result.url })
         message.success('群头像已更新')
         clearCropState()
     } catch (error: unknown) {
@@ -1706,7 +1672,7 @@ const handleAvatarCropConfirm = async (avatarFile: File) => {
 }
 
 const handleSaveGroupConfig = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     if (!trimText(groupConfigForm.name)) {
@@ -1715,7 +1681,7 @@ const handleSaveGroupConfig = async () => {
     }
     groupConfigSaving.value = true
     try {
-        await chatStore.updateGroupConfig(chatStore.activeConversationId, {
+        await chatConversation.updateGroupConfig(chatConversationState.activeConversationId, {
             name: trimText(groupConfigForm.name),
             avatar: trimText(groupConfigForm.avatar),
             join_approval_required: groupConfigForm.join_approval_required,
@@ -1735,22 +1701,22 @@ const handleSaveGroupConfig = async () => {
 
 const toggleGroupNameEditing = async () => {
     if (groupNameEditing.value) {
-        groupConfigForm.name = chatStore.activeConversation?.name || ''
+        groupConfigForm.name = chatConversationState.activeConversation?.name || ''
         groupNameEditing.value = false
         return
     }
-    groupConfigForm.name = chatStore.activeConversation?.name || groupConfigForm.name
+    groupConfigForm.name = chatConversationState.activeConversation?.name || groupConfigForm.name
     groupNameEditing.value = true
     await focusEditableInput(groupNameInputRef.value)
 }
 
 const updateGroupConfigPartial = async (payload: { name?: string; max_members?: number | null; join_approval_required?: boolean; allow_member_invite?: boolean; mute_all?: boolean }) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     groupConfigSaving.value = true
     try {
-        await chatStore.updateGroupConfig(chatStore.activeConversationId, payload)
+        await chatConversation.updateGroupConfig(chatConversationState.activeConversationId, payload)
     } catch (error: unknown) {
         syncGroupConfigForm()
         message.error(getErrorMessage(error, '更新群聊设置失败'))
@@ -1762,8 +1728,8 @@ const updateGroupConfigPartial = async (payload: { name?: string; max_members?: 
 const commitGroupName = async () => {
     const nextValue = trimText(groupConfigForm.name)
     groupNameEditing.value = false
-    if (!chatStore.activeConversationId || !nextValue || nextValue === (chatStore.activeConversation?.name || '')) {
-        groupConfigForm.name = nextValue || chatStore.activeConversation?.name || ''
+    if (!chatConversationState.activeConversationId || !nextValue || nextValue === (chatConversationState.activeConversation?.name || '')) {
+        groupConfigForm.name = nextValue || chatConversationState.activeConversation?.name || ''
         return
     }
     groupConfigForm.name = nextValue
@@ -1786,15 +1752,15 @@ const handleGroupNameEnter = async (event: KeyboardEvent) => {
 }
 
 const handleGroupNameEscape = () => {
-    groupConfigForm.name = chatStore.activeConversation?.name || ''
+    groupConfigForm.name = chatConversationState.activeConversation?.name || ''
     groupNameEditing.value = false
 }
 
 const handleGroupMaxMembersBlur = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
-    const currentValue = chatStore.activeConversation?.group_config?.max_members ?? null
+    const currentValue = chatConversationState.activeConversation?.group_config?.max_members ?? null
     if ((groupConfigForm.max_members ?? null) === currentValue) {
         return
     }
@@ -1806,13 +1772,13 @@ const handleGroupSwitchChange = async (field: 'join_approval_required' | 'allow_
 }
 
 const handlePinChange = async (checked: boolean) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     const previous = pinnedConversation.value
     pinnedConversation.value = checked
     try {
-        await chatStore.toggleConversationPin(chatStore.activeConversationId, checked)
+        await chatConversation.toggleConversationPin(chatConversationState.activeConversationId, checked)
     } catch (error: unknown) {
         pinnedConversation.value = previous
         message.error(getErrorMessage(error, '更新置顶状态失败'))
@@ -1820,13 +1786,13 @@ const handlePinChange = async (checked: boolean) => {
 }
 
 const handleMuteNotificationChange = async (checked: boolean) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     const previous = muteNotifications.value
     muteNotifications.value = checked
     try {
-        await chatStore.updateConversationPreferences(chatStore.activeConversationId, { mute_notifications: checked })
+        await chatConversation.updateConversationPreferences(chatConversationState.activeConversationId, { mute_notifications: checked })
     } catch (error: unknown) {
         muteNotifications.value = previous
         message.error(getErrorMessage(error, '更新免打扰状态失败'))
@@ -1834,7 +1800,7 @@ const handleMuteNotificationChange = async (checked: boolean) => {
 }
 
 const handleSaveGroupNickname = async () => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     if (groupNicknameSaving.value) {
@@ -1843,7 +1809,7 @@ const handleSaveGroupNickname = async () => {
     groupNicknameSaving.value = true
     try {
         const nextValue = trimText(groupNicknameInput.value)
-        await chatStore.updateConversationPreferences(chatStore.activeConversationId, { group_nickname: nextValue })
+        await chatConversation.updateConversationPreferences(chatConversationState.activeConversationId, { group_nickname: nextValue })
         groupNicknameInput.value = nextValue
         message.success('群昵称已更新')
     } catch (error: unknown) {
@@ -1855,7 +1821,7 @@ const handleSaveGroupNickname = async () => {
 
 const commitGroupNickname = async () => {
     const nextValue = trimText(groupNicknameInput.value)
-    const currentValue = chatStore.activeConversation?.member_settings?.group_nickname || ''
+    const currentValue = chatConversationState.activeConversation?.member_settings?.group_nickname || ''
     groupNicknameInput.value = nextValue
     if (nextValue === currentValue) {
         return
@@ -1888,7 +1854,7 @@ const handleSaveDirectRemark = async () => {
     friendRemarkSaving.value = true
     try {
         const nextValue = trimText(directRemark.value)
-        await chatStore.updateFriendRemark(currentFriendship.value.friend_user.id, nextValue)
+        await chatFriendship.updateFriendRemark(currentFriendship.value.friend_user.id, nextValue)
         directRemark.value = nextValue
         message.success('好友备注已更新')
     } catch (error: unknown) {
@@ -1941,12 +1907,12 @@ const handleDirectRemarkEscape = () => {
 }
 
 const handleInviteMembers = async () => {
-    if (!chatStore.activeConversationId || !selectedInviteUserIds.value.length) {
+    if (!chatConversationState.activeConversationId || !selectedInviteUserIds.value.length) {
         return
     }
     try {
         for (const userId of selectedInviteUserIds.value) {
-            await chatStore.inviteMember(chatStore.activeConversationId, userId)
+            await chatGroup.inviteMember(chatConversationState.activeConversationId, userId)
         }
         const invitedCount = selectedInviteUserIds.value.length
         selectedInviteUserIds.value = []
@@ -1958,11 +1924,11 @@ const handleInviteMembers = async () => {
 }
 
 const handleRemoveMember = async (userId: number) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.removeMember(chatStore.activeConversationId, userId)
+        await chatGroup.removeMember(chatConversationState.activeConversationId, userId)
         message.success('成员已移除')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '移除成员失败'))
@@ -1970,11 +1936,11 @@ const handleRemoveMember = async (userId: number) => {
 }
 
 const handleToggleMemberRole = async (userId: number, role: 'admin' | 'member') => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.updateMemberRole(chatStore.activeConversationId, userId, role)
+        await chatGroup.updateMemberRole(chatConversationState.activeConversationId, userId, role)
         message.success('成员角色已更新')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '更新成员角色失败'))
@@ -1982,12 +1948,12 @@ const handleToggleMemberRole = async (userId: number, role: 'admin' | 'member') 
 }
 
 const handleMuteMember = async (userId: number, muteMinutes = 10) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.muteMember(chatStore.activeConversationId, userId, muteMinutes, muteMinutes > 0 ? '前端快捷禁言' : '解除禁言')
-        await chatStore.loadMembers(chatStore.activeConversationId)
+        await chatGroup.muteMember(chatConversationState.activeConversationId, userId, muteMinutes, muteMinutes > 0 ? '前端快捷禁言' : '解除禁言')
+        await chatGroup.loadMembers(chatConversationState.activeConversationId)
         message.success(muteMinutes > 0 ? `已禁言 ${formatMuteMinutesLabel(muteMinutes)}` : '已解除禁言')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, muteMinutes > 0 ? '禁言成员失败' : '解除禁言失败'))
@@ -2005,7 +1971,7 @@ const formatMuteMinutesLabel = (muteMinutes: number) => {
 }
 
 const handleMemberActionMenuClick = async (member: ChatConversationMemberItem, event: { key: string }) => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     if (event.key.startsWith('mute:')) {
@@ -2031,11 +1997,11 @@ const handleMemberActionMenuClick = async (member: ChatConversationMemberItem, e
 }
 
 const handleJoinRequestAction = async (requestId: number, action: 'approve' | 'reject') => {
-    if (!chatStore.activeConversationId) {
+    if (!chatConversationState.activeConversationId) {
         return
     }
     try {
-        await chatStore.handleJoinRequest(requestId, action, chatStore.activeConversationId)
+        await chatGroup.handleJoinRequest(requestId, action, chatConversationState.activeConversationId)
         message.success('审批已处理')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '处理审批失败'))
@@ -2058,12 +2024,20 @@ const handleRetryMessage = async () => {
         return
     }
     try {
-        await chatStore.retryMessage(messageMenuMessage.value)
+        await chatMessage.retryMessage(messageMenuMessage.value)
     } catch (error: unknown) {
-        message.error(getErrorMessage(error, '重新发送失败'))
+        message.error(getMessageFailureToast(error))
     } finally {
         closeMessageMenu()
     }
+}
+
+const handleDownloadAssetMessage = () => {
+    if (!messageMenuMessage.value || !isAssetMessage(messageMenuMessage.value)) {
+        return
+    }
+    triggerAssetDownload(messageMenuMessage.value)
+    closeMessageMenu()
 }
 
 const handleCopyMessage = async () => {
@@ -2087,7 +2061,7 @@ const handleCopyMessage = async () => {
                     'text/html': new Blob([html], { type: 'text/html' }),
                 }),
             ])
-            message.success('文件盒子已复制')
+            message.success('消息已复制')
             closeMessageMenu()
             return
         }
@@ -2113,9 +2087,8 @@ const handleForwardMessage = () => {
     if (!messageMenuMessage.value) {
         return
     }
-    forwardingMessageIds.value = [messageMenuMessage.value.id]
+    beginForwardSelection([messageMenuMessage.value.id])
     closeMessageMenu()
-    void openForwardModal()
 }
 
 const handleForwardSelection = () => {
@@ -2123,12 +2096,16 @@ const handleForwardSelection = () => {
         message.warning('请先选择消息')
         return
     }
-    forwardingMessageIds.value = [...selectedMessageIds.value]
-    void openForwardModal()
+    beginForwardSelection(selectedMessageIds.value)
 }
 
 const handleQuoteMessage = () => {
     if (!messageMenuMessage.value) {
+        return
+    }
+    if (isRevokedMessage(messageMenuMessage.value)) {
+        message.warning('已撤回的消息不能引用')
+        closeMessageMenu()
         return
     }
     quotedMessage.value = messageMenuMessage.value
@@ -2137,10 +2114,185 @@ const handleQuoteMessage = () => {
 
 const enableMessageSelection = (messageItem: ChatMessageItem) => {
     messageSelectionMode.value = true
-    if (!isMessageSelected(messageItem.id)) {
+    if (!isRevokedMessage(messageItem) && !isMessageSelected(messageItem.id)) {
         selectedMessageIds.value = [...selectedMessageIds.value, messageItem.id]
     }
     closeMessageMenu()
+}
+
+const toggleSaveAssetFolderInline = () => {
+    saveAssetCreateFolderOpen.value = !saveAssetCreateFolderOpen.value
+    if (!saveAssetCreateFolderOpen.value) {
+        saveAssetFolderName.value = ''
+    }
+}
+
+const openSaveAssetBreadcrumb = async (id: number | null) => {
+    try {
+        await loadSaveAssetFolders(id)
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '打开目录失败'))
+    }
+}
+
+const enterSaveAssetFolder = async (folder: FileEntryItem) => {
+    try {
+        await loadSaveAssetFolders(folder.id)
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '进入目录失败'))
+    }
+}
+
+const handleCreateSaveAssetFolder = async () => {
+    const folderName = trimText(saveAssetFolderName.value)
+    if (!folderName) {
+        message.warning('请输入目录名称')
+        return
+    }
+    saveAssetSaving.value = true
+    try {
+        await createFolderApi({
+            name: folderName,
+            parent_id: saveAssetCurrentParentId.value,
+        })
+        saveAssetFolderName.value = ''
+        saveAssetCreateFolderOpen.value = false
+        await loadSaveAssetFolders(saveAssetCurrentParentId.value)
+        message.success('目录已创建')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '创建目录失败'))
+    } finally {
+        saveAssetSaving.value = false
+    }
+}
+
+const handleSaveAssetToResource = async () => {
+    if (!messageMenuMessage.value || !isAssetMessage(messageMenuMessage.value)) {
+        return
+    }
+    saveAssetPendingMessage.value = messageMenuMessage.value
+    saveAssetDialogOpen.value = true
+    saveAssetCreateFolderOpen.value = false
+    saveAssetFolderName.value = ''
+    closeMessageMenu()
+    try {
+        await loadSaveAssetFolders(null)
+    } catch (error: unknown) {
+        saveAssetDialogOpen.value = false
+        saveAssetPendingMessage.value = null
+        message.error(getErrorMessage(error, '加载目录失败'))
+    }
+}
+
+const confirmSaveAssetToResource = async () => {
+    const currentMessage = saveAssetPendingMessage.value
+    if (!currentMessage) {
+        saveAssetDialogOpen.value = false
+        return
+    }
+    const payload = getAssetMessagePayload(currentMessage)
+    const sourceAssetReferenceId = Number(payload?.asset_reference_id || payload?.source_asset_reference_id || 0)
+    if (!sourceAssetReferenceId) {
+        message.warning('当前附件暂不支持保存到资源中心')
+        return
+    }
+    saveAssetSaving.value = true
+    try {
+        await saveChatAttachmentToResourceApi({
+            source_asset_reference_id: sourceAssetReferenceId,
+            parent_id: saveAssetCurrentParentId.value,
+            display_name: payload?.display_name || currentMessage.content || undefined,
+        })
+        saveAssetDialogOpen.value = false
+        saveAssetPendingMessage.value = null
+        message.success('已保存到资源中心')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '保存附件失败'))
+    } finally {
+        saveAssetSaving.value = false
+    }
+}
+
+const handleRevokeMessage = async () => {
+    const currentMessage = messageMenuMessage.value
+    if (!currentMessage || !canRevokeMessage(currentMessage)) {
+        closeMessageMenu()
+        return
+    }
+    try {
+        await chatMessage.revokeMessage(currentMessage.id)
+        if (quotedMessage.value?.id === currentMessage.id) {
+            quotedMessage.value = null
+        }
+        selectedMessageIds.value = selectedMessageIds.value.filter((item) => item !== currentMessage.id)
+        if (!selectedMessageIds.value.length) {
+            messageSelectionMode.value = false
+        }
+        message.success('消息已撤回')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '撤回消息失败'))
+    } finally {
+        closeMessageMenu()
+    }
+}
+
+const handleDeleteMessage = async () => {
+    const currentMessage = messageMenuMessage.value
+    if (!currentMessage || !canDeleteMessage(currentMessage)) {
+        closeMessageMenu()
+        return
+    }
+    Modal.confirm({
+        title: '确认删除这条消息？',
+        content: '删除后，这条消息只会从你的视角中隐藏。',
+        okText: '删除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        async onOk() {
+            try {
+                const { detail } = await chatMessage.deleteMessage(currentMessage.id)
+                if (quotedMessage.value?.id === currentMessage.id) {
+                    quotedMessage.value = null
+                }
+                selectedMessageIds.value = selectedMessageIds.value.filter((item) => item !== currentMessage.id)
+                if (!selectedMessageIds.value.length) {
+                    messageSelectionMode.value = false
+                }
+                message.success(detail || '消息已删除')
+            } catch (error: unknown) {
+                message.error(getErrorMessage(error, '删除消息失败'))
+                throw error
+            } finally {
+                closeMessageMenu()
+            }
+        },
+        onCancel() {
+            closeMessageMenu()
+        },
+    })
+}
+
+const handleRestoreRevokedMessage = async (messageItem: ChatMessageItem) => {
+    try {
+        const { draft, detail } = await chatMessage.restoreRevokedDraft(messageItem.id)
+        const draftPayload = (draft.payload || {}) as Partial<ChatMessageAssetPayload>
+        if (draft.message_type === 'text' && draft.content) {
+            composerRef.value?.insertText(draft.content)
+        } else if ((draft.message_type === 'image' || draft.message_type === 'file') && Number(draftPayload.source_asset_reference_id || draftPayload.asset_reference_id || 0)) {
+            composerRef.value?.insertAttachment(buildComposerAttachmentToken({
+                sourceAssetReferenceId: Number(draftPayload.source_asset_reference_id || draftPayload.asset_reference_id || 0),
+                displayName: String(draftPayload.display_name || messageItem.content || '附件'),
+                mediaType: String(draftPayload.media_type || draft.message_type || 'file'),
+                mimeType: String(draftPayload.mime_type || ''),
+                fileSize: Number(draftPayload.file_size || 0) || undefined,
+                url: String(draftPayload.url || ''),
+            }))
+        }
+        composerRef.value?.focus()
+        message.success(detail || '已恢复到输入框')
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, '恢复撤回内容失败'))
+    }
 }
 
 const handleApplyGroupInvitation = async () => {
@@ -2154,9 +2306,9 @@ const handleApplyGroupInvitation = async () => {
             conversation_id: invitation.conversation_id,
             inviter_user_id: invitation.inviter.id,
         })
-        await Promise.all([chatStore.loadConversations(), chatStore.loadContactGroupConversations()])
+        await Promise.all([chatConversation.loadConversations(), chatConversation.loadContactGroupConversations()])
         if (data.mode === 'joined' && data.conversation?.id) {
-            await chatStore.selectConversation(data.conversation.id)
+            await chatConversation.selectConversation(data.conversation.id)
         }
         groupInvitationModalOpen.value = false
         message.success(data.detail || '申请已提交')
@@ -2204,17 +2356,12 @@ const startComposerResize = (event: MouseEvent) => {
 }
 
 watch(
-    () => chatStore.activeConversationId,
+    () => chatConversationState.activeConversationId,
     () => {
         clearMessageSelection()
         quotedMessage.value = null
-        forwardModalOpen.value = false
-        forwardModeModalOpen.value = false
-        forwardingMessageIds.value = []
-        pendingForwardTarget.value = null
-        forwardSearchKeyword.value = ''
-        selectedForwardTargetKey.value = ''
-        chatRecordViewerStack.value = []
+        resetForwardingState()
+        clearChatRecordViewers()
         memberModalOpen.value = false
         inviteModalOpen.value = false
         memberSearchKeyword.value = ''
@@ -2230,14 +2377,14 @@ watch(
 )
 
 watch(
-    () => chatStore.activeMessages.length,
+    () => chatMessageState.activeMessages.length,
     async () => {
-        const activeId = chatStore.activeConversationId
-        const focusSequence = activeId ? chatStore.focusedSequenceMap[activeId] : null
+        const activeId = chatConversationState.activeConversationId
+        const focusSequence = activeId ? chatConversationState.focusedSequenceMap[activeId] : null
         if (activeId && focusSequence) {
             const located = await scrollToSequence(focusSequence)
             if (located) {
-                chatStore.clearFocusedSequence(activeId)
+                chatConversation.clearFocusedSequence(activeId)
                 return
             }
         }
@@ -2246,7 +2393,28 @@ watch(
 )
 
 watch(
-    () => chatStore.activeConversation?.group_config,
+    () => chatMessageState.activeMessages.map((item) => `${item.id}:${isRevokedMessage(item) ? 1 : 0}`).join('|'),
+    () => {
+        if (quotedMessage.value) {
+            const latestQuoted = chatMessageState.activeMessages.find((item) => item.id === quotedMessage.value?.id)
+            if (!latestQuoted || isRevokedMessage(latestQuoted)) {
+                quotedMessage.value = null
+            } else {
+                quotedMessage.value = latestQuoted
+            }
+        }
+        if (selectedMessageIds.value.length) {
+            const activeMessageIds = new Set(chatMessageState.activeMessages.filter((item) => !isRevokedMessage(item)).map((item) => item.id))
+            selectedMessageIds.value = selectedMessageIds.value.filter((item) => activeMessageIds.has(item))
+            if (!selectedMessageIds.value.length) {
+                messageSelectionMode.value = false
+            }
+        }
+    },
+)
+
+watch(
+    () => chatConversationState.activeConversation?.group_config,
     () => {
         syncGroupConfigForm()
     },
@@ -2254,7 +2422,7 @@ watch(
 )
 
 watch(
-    () => [chatStore.activeConversation, currentFriendship.value],
+    () => [chatConversationState.activeConversation, currentFriendship.value],
     () => {
         syncPreferenceForm()
     },
@@ -2275,7 +2443,6 @@ watch(inviteSearchKeyword, (value) => {
 
 onMounted(() => {
     document.addEventListener('click', handleDocumentClick)
-    recentForwardTargetKeys.value = loadRecentForwardTargetKeys()
 })
 
 onBeforeUnmount(() => {
@@ -2298,6 +2465,10 @@ onBeforeUnmount(() => {
         URL.revokeObjectURL(avatarTempObjectUrl)
         avatarTempObjectUrl = ''
     }
+    localAttachmentFiles.forEach((item) => {
+        URL.revokeObjectURL(item.objectUrl)
+    })
+    localAttachmentFiles.clear()
     stopComposerResize()
 })
 
@@ -2349,9 +2520,13 @@ function escapeHtml(value: string) {
 }
 
 .chat-main__title {
+    min-width: 0;
     font-size: 18px;
     font-weight: 700;
     color: var(--chat-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .chat-main__header-main {
@@ -2386,13 +2561,17 @@ function escapeHtml(value: string) {
 .chat-main__meta {
     font-size: 12px;
     justify-content: flex-start;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chat-menu-trigger {
     width: 34px;
     height: 34px;
     padding: 0;
-    border-radius: 10px;
+    border-radius: 14px;
 }
 
 .chat-main__messages,
@@ -2427,10 +2606,14 @@ function escapeHtml(value: string) {
 }
 
 .message-row.self {
-    justify-content: flex-end;
+    justify-content: center;
 }
 
 .message-row.system {
+    justify-content: center;
+}
+
+.message-row--revoked {
     justify-content: center;
 }
 
@@ -2539,6 +2722,29 @@ function escapeHtml(value: string) {
     justify-content: flex-end;
 }
 
+.message-revoked-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-width: min(100%, 320px);
+    max-width: 100%;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--chat-subtle-bg) 88%, var(--chat-panel-bg-strong));
+    color: var(--chat-text-secondary);
+    font-size: 12px;
+}
+
+.message-revoked-row__restore {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--chat-accent);
+    cursor: pointer;
+    font-weight: 600;
+}
+
 .message-row--focused {
     background: color-mix(in srgb, var(--chat-accent-soft) 82%, var(--chat-panel-bg));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat-accent) 22%, transparent), 0 10px 24px color-mix(in srgb, var(--chat-accent) 10%, transparent);
@@ -2561,6 +2767,11 @@ function escapeHtml(value: string) {
     overflow-wrap: anywhere;
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.1);
     transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background-color 0.18s ease;
+}
+
+.message-bubble--asset {
+    padding: 10px;
+    overflow: hidden;
 }
 
 .message-bubble__text {
@@ -2617,18 +2828,92 @@ function escapeHtml(value: string) {
     flex-direction: column;
     gap: 10px;
     width: min(360px, 100%);
-    min-width: min(300px, 100%);
+    min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
 }
 
+.attachment-bubble--media {
+    gap: 0;
+}
+
+
+.attachment-bubble__media-shell {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16/9;
+        max-width: 320px;
+        max-height: 220px;
+        min-width: 120px;
+        min-height: 80px;
+        margin: 0 auto;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 14px;
+        transition: max-width 0.2s;
+}
+
+@media (max-width: 600px) {
+    .attachment-bubble__media-shell {
+        max-width: 80vw;
+    }
+}
+
+
 .attachment-bubble__preview {
     display: block;
-    max-width: min(280px, 100%);
-    max-height: 220px;
-    border-radius: 14px;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 16/9;
     object-fit: cover;
+    border-radius: 14px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    background: #f3f4f6;
+    transition: box-shadow 0.2s;
+}
+
+.attachment-bubble__preview--video {
+    background: #111827;
+    object-fit: cover;
+}
+
+
+.attachment-bubble__overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.28);
+}
+
+.attachment-bubble__progress-ring,
+.attachment-bubble__play-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #111827;
+    font-size: 18px;
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.attachment-bubble__play-button {
+    border: 0;
+    cursor: pointer;
+}
+
+.attachment-bubble__play-button :deep(svg) {
+    font-size: 28px;
+    transform: translateX(2px);
 }
 
 .attachment-bubble__body {
@@ -2751,6 +3036,15 @@ function escapeHtml(value: string) {
     line-height: 18px;
     text-align: center;
     cursor: pointer;
+}
+
+.message-failure-hint {
+    margin-top: 6px;
+    padding-right: 24px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #dc2626;
+    text-align: right;
 }
 
 .system-bubble {
@@ -2889,6 +3183,15 @@ function escapeHtml(value: string) {
     background: color-mix(in srgb, var(--chat-accent-soft) 52%, var(--chat-panel-bg-strong));
 }
 
+.message-bubble__reply:disabled {
+    cursor: default;
+    opacity: 0.78;
+}
+
+.message-bubble__reply:disabled:hover {
+    background: color-mix(in srgb, var(--chat-subtle-bg) 86%, var(--chat-panel-bg-strong));
+}
+
 .message-bubble.self .message-bubble__reply {
     background: rgba(255, 255, 255, 0.24);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
@@ -3014,6 +3317,52 @@ function escapeHtml(value: string) {
     display: flex;
     flex-direction: column;
     gap: 20px;
+}
+
+.asset-preview-modal {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 320px;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.asset-preview-modal__image,
+.asset-preview-modal__video {
+    display: block;
+    max-width: 100%;
+    max-height: min(72vh, 720px);
+    border-radius: 14px;
+    background: #0f172a;
+}
+
+.target-modal-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.target-modal-toolbar__breadcrumb {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.target-modal-toolbar__inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.save-asset-folder-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--chat-accent);
+    cursor: pointer;
 }
 
 .group-invitation-modal__summary {
@@ -3243,180 +3592,6 @@ function escapeHtml(value: string) {
     line-height: 1;
 }
 
-.forward-modal {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-}
-
-.forward-modal__topbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
-    align-items: center;
-    gap: 14px;
-}
-
-.forward-modal__summary {
-    min-width: 0;
-    font-size: 13px;
-    color: var(--chat-text-secondary);
-}
-
-.forward-modal__search {
-    width: 100%;
-}
-
-.forward-modal__section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.forward-modal__section-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--chat-text-primary);
-}
-
-.forward-modal__recent-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-    gap: 10px;
-}
-
-.forward-modal__recent-card,
-.forward-modal__item {
-    border: 1px solid var(--chat-panel-border);
-    background: var(--chat-panel-bg-strong);
-    color: var(--chat-text-primary);
-    transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-    cursor: pointer;
-}
-
-.forward-modal__recent-card:disabled,
-.forward-modal__item:disabled {
-    cursor: not-allowed;
-    opacity: 0.72;
-}
-
-.forward-modal__recent-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 116px;
-    padding: 14px 10px;
-    border-radius: 16px;
-    text-align: center;
-}
-
-.forward-modal__recent-card:hover,
-.forward-modal__item:hover,
-.forward-modal__recent-card.is-active,
-.forward-modal__item.is-active {
-    border-color: color-mix(in srgb, var(--chat-accent) 54%, white);
-    background: color-mix(in srgb, var(--chat-accent-soft) 72%, var(--chat-panel-bg-strong));
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-    transform: translateY(-1px);
-}
-
-.forward-modal__recent-name,
-.forward-modal__name {
-    display: block;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--chat-text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.forward-modal__recent-desc,
-.forward-modal__desc,
-.forward-modal__type {
-    font-size: 12px;
-    color: var(--chat-text-secondary);
-}
-
-.forward-modal__list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-height: 280px;
-    max-height: 360px;
-    overflow-y: auto;
-    padding-right: 2px;
-}
-
-.forward-modal__item {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    padding: 12px 14px;
-    border-radius: 14px;
-    text-align: left;
-}
-
-.forward-modal__body {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-}
-
-.forward-mode-modal {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.forward-mode-modal__summary {
-    font-size: 13px;
-    color: var(--chat-text-secondary);
-}
-
-.forward-mode-modal__action {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    width: 100%;
-    padding: 14px 16px;
-    border: 1px solid var(--chat-panel-border);
-    border-radius: 14px;
-    background: var(--chat-panel-bg-strong);
-    color: var(--chat-text-primary);
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
-}
-
-.forward-mode-modal__action:hover {
-    border-color: color-mix(in srgb, var(--chat-accent) 54%, white);
-    background: color-mix(in srgb, var(--chat-accent-soft) 72%, var(--chat-panel-bg-strong));
-    transform: translateY(-1px);
-}
-
-.forward-mode-modal__action:disabled {
-    cursor: not-allowed;
-    opacity: 0.72;
-    transform: none;
-}
-
-.forward-mode-modal__title {
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.forward-mode-modal__desc {
-    font-size: 12px;
-    color: var(--chat-text-secondary);
-}
-
 .entity-modal {
     display: flex;
     flex-direction: column;
@@ -3596,6 +3771,25 @@ function escapeHtml(value: string) {
     box-shadow: var(--chat-panel-shadow);
 }
 
+.failed-menu__hint {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid color-mix(in srgb, #ef4444 16%, transparent);
+    color: #b91c1c;
+    background: color-mix(in srgb, #ef4444 10%, var(--chat-panel-bg-strong));
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.failed-menu__hint-title {
+    font-weight: 600;
+}
+
+.failed-menu__hint-detail {
+    margin-top: 4px;
+    color: color-mix(in srgb, #7f1d1d 82%, var(--chat-text-secondary));
+    word-break: break-word;
+}
+
 .failed-menu__item {
     width: 100%;
     padding: 8px 10px;
@@ -3649,12 +3843,10 @@ function escapeHtml(value: string) {
         grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
-    .forward-modal__topbar {
-        grid-template-columns: 1fr;
-    }
+}
 
-    .forward-modal__search {
-        max-width: none;
-    }
+:deep(.ant-modal-body) {
+    border-radius: 14px;
+    overflow: hidden;
 }
 </style>

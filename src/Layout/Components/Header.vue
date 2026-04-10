@@ -61,6 +61,7 @@ interface NavMeta {
     menuTitle?: string
     menuOrder?: number
     permissionCode?: string
+    superuserOnly?: boolean
 }
 
 function collectNavItems(routeList: RouteRecordRaw[], parentPath = ''): Array<{ path: string; title: string }> {
@@ -75,6 +76,9 @@ function collectNavItems(routeList: RouteRecordRaw[], parentPath = ''): Array<{ 
         const meta = (route.meta || {}) as NavMeta
         const descendants = route.children?.length ? collectNavItems(route.children, fullPath) : []
         if (meta.menuGroup && descendants.length === 0) {
+            continue
+        }
+        if (meta.superuserOnly && !userStore.isSuperuser) {
             continue
         }
         if (meta.permissionCode && !authStore.hasPermission(meta.permissionCode)) {

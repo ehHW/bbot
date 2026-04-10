@@ -8,14 +8,14 @@
         </header>
 
         <div class="drawer-list">
-            <div v-for="messageItem in chatStore.adminMessages" :key="`audit-message-${messageItem.id}`" class="drawer-list-item">
+            <div v-for="messageItem in chatAudit.adminMessages" :key="`audit-message-${messageItem.id}`" class="drawer-list-item">
                 <div>
                     <div class="drawer-list-title">会话 #{{ messageItem.conversation_id }}</div>
                     <div class="drawer-list-desc">{{ messageItem.content }}</div>
                 </div>
                 <a-button size="small" @click="openConversation(messageItem.conversation_id, messageItem.sequence)">打开</a-button>
             </div>
-            <a-empty v-if="!chatStore.adminMessages.length" description="暂无消息" />
+            <a-empty v-if="!chatAudit.adminMessages.length" description="暂无消息" />
         </div>
     </section>
 </template>
@@ -26,9 +26,11 @@ import { useChatShell } from '@/views/Chat/useChatShell'
 
 const router = useRouter()
 const { chatStore } = useChatShell()
+const chatAudit = chatStore.audit
+const chatConversation = chatStore.conversation
 
 const openConversation = async (conversationId: number, sequence?: number) => {
-    await chatStore.selectConversation(conversationId, sequence ? { focusSequence: sequence } : undefined)
+    await chatConversation.selectConversation(conversationId, sequence ? { focusSequence: sequence } : undefined)
     await router.push({ name: 'ChatMessages' })
 }
 </script>

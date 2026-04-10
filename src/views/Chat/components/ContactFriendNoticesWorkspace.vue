@@ -9,7 +9,7 @@
 
         <a-divider orientation="left">待处理的好友申请</a-divider>
         <div class="notice-list">
-            <div v-for="request in chatStore.receivedRequests" :key="`pending-${request.id}`" class="notice-item notice-item--request">
+            <div v-for="request in chatFriendshipState.receivedRequests" :key="`pending-${request.id}`" class="notice-item notice-item--request">
                 <div>
                     <div class="notice-item__title">{{ request.from_user.display_name || request.from_user.username }}</div>
                     <div class="notice-item__desc">{{ request.request_message || '对方没有填写附言' }}</div>
@@ -21,12 +21,12 @@
                 </a-space>
                 <a-tag v-else :color="statusColorMap[request.status] || 'default'">{{ statusLabelMap[request.status] || request.status }}</a-tag>
             </div>
-            <a-empty v-if="!chatStore.receivedRequests.length" description="暂无收到的好友申请" />
+            <a-empty v-if="!chatFriendshipState.receivedRequests.length" description="暂无收到的好友申请" />
         </div>
 
         <a-divider orientation="left">发出的好友申请</a-divider>
         <div class="notice-list">
-            <div v-for="request in chatStore.sentRequests" :key="`sent-${request.id}`" class="notice-item notice-item--request">
+            <div v-for="request in chatFriendshipState.sentRequests" :key="`sent-${request.id}`" class="notice-item notice-item--request">
                 <div>
                     <div class="notice-item__title">{{ request.to_user.display_name || request.to_user.username }}</div>
                     <div class="notice-item__desc">{{ request.request_message || '未填写附言' }}</div>
@@ -37,7 +37,7 @@
                 </a-space>
                 <a-tag v-else :color="statusColorMap[request.status] || 'default'">{{ statusLabelMap[request.status] || request.status }}</a-tag>
             </div>
-            <a-empty v-if="!chatStore.sentRequests.length" description="暂无发出的好友申请" />
+            <a-empty v-if="!chatFriendshipState.sentRequests.length" description="暂无发出的好友申请" />
         </div>
 
         <a-divider orientation="left">处理记录</a-divider>
@@ -60,6 +60,8 @@ import { getErrorMessage } from '@/utils/error'
 import { useChatShell } from '@/views/Chat/useChatShell'
 
 const { chatStore, formatDateTime } = useChatShell()
+const chatFriendshipState = chatStore.state.friendshipState
+const chatFriendship = chatStore.friendship
 
 const statusLabelMap: Record<ChatRequestStatus, string> = {
     pending: '待处理',
@@ -77,30 +79,43 @@ const statusColorMap: Partial<Record<ChatRequestStatus, string>> = {
 }
 
 const friendNoticeItems = computed(() => {
-    const received = chatStore.receivedRequests
+    const received = chatFriendshipState.receivedRequests
         .filter((item) => item.status !== 'pending')
         .map((item) => ({
-            id: item.id,
+            id: `request-received-${item.id}`,
+            sourceId: item.id,
+            sourceType: 'request' as const,
             kind: 'received',
             title: `${item.from_user.display_name || item.from_user.username} 的好友申请${item.status === 'accepted' ? '已通过' : item.status === 'rejected' ? '已拒绝' : '已处理'}`,
             description: item.request_message || '无附言',
             created_at: item.handled_at || item.created_at,
         }))
-    const sent = chatStore.sentRequests
+    const sent = chatFriendshipState.sentRequests
         .filter((item) => item.status !== 'pending')
         .map((item) => ({
-            id: item.id,
+            id: `request-sent-${item.id}`,
+            sourceId: item.id,
+            sourceType: 'request' as const,
             kind: 'sent',
             title: `你发给 ${item.to_user.display_name || item.to_user.username} 的好友申请${item.status === 'accepted' ? '已通过' : item.status === 'rejected' ? '已拒绝' : item.status === 'canceled' ? '已撤销' : '已处理'}`,
             description: item.request_message || '无附言',
             created_at: item.handled_at || item.created_at,
         }))
-    return [...received, ...sent].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+    const system = chatFriendshipState.friendNoticeItems.map((item) => ({
+        id: item.id,
+        sourceId: item.id,
+        sourceType: 'system' as const,
+        kind: 'system',
+        title: item.title,
+        description: item.description,
+        created_at: item.created_at,
+    }))
+    return [...received, ...sent, ...system].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
 })
 
 const loadData = async () => {
     try {
-        await chatStore.loadFriendRequests()
+        await chatFriendship.loadFriendRequests()
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '加载好友通知失败'))
     }
@@ -108,7 +123,7 @@ const loadData = async () => {
 
 const handleRequestAction = async (requestId: number, action: 'accept' | 'reject' | 'cancel') => {
     try {
-        await chatStore.handleFriendRequest(requestId, action)
+        await chatFriendship.handleFriendRequest(requestId, action)
         message.success('操作成功')
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '处理好友申请失败'))
@@ -118,15 +133,16 @@ const handleRequestAction = async (requestId: number, action: 'accept' | 'reject
 watch(
     friendNoticeItems,
     (items) => {
-        chatStore.markFriendNoticesSeen(items.map((item) => item.id))
+        chatFriendship.markFriendNoticesSeen(items.filter((item) => item.sourceType === 'request').map((item) => item.sourceId as number))
+        chatFriendship.markFriendSystemNoticesSeen(items.filter((item) => item.sourceType === 'system').map((item) => item.sourceId as string))
     },
     { immediate: true },
 )
 
 watch(
-    () => chatStore.receivedRequests.filter((item) => item.status === 'pending').map((item) => item.id),
+    () => chatFriendshipState.receivedRequests.filter((item) => item.status === 'pending').map((item) => item.id),
     (requestIds) => {
-        chatStore.markPendingRequestsSeen(requestIds)
+        chatFriendship.markPendingRequestsSeen(requestIds)
     },
     { immediate: true },
 )

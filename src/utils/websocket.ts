@@ -8,6 +8,9 @@ export interface WebSocketMessage {
     domain?: string
     occurred_at?: string
     message?: string
+    error_kind?: 'schema' | 'business' | 'permission'
+    error_code?: string
+    error_details?: Record<string, string[]>
     timestamp?: number
     [key: string]: unknown
 }
@@ -299,6 +302,7 @@ class GlobalWebSocketManager {
             'system.force_logout': 'force_logout',
             'chat.message.ack': 'chat_message_ack',
             'chat.message.created': 'chat_new_message',
+            'chat.message.updated': 'chat_message_updated',
             'chat.conversation.updated': 'chat_conversation_updated',
             'chat.unread.updated': 'chat_unread_updated',
             'chat.friend_request.updated': 'chat_friend_request_updated',

@@ -49,6 +49,25 @@ export const forwardMessagesApi = (payload: { target_conversation_id: number; me
     return instance.post<{ detail: string; target_conversation_id: number; forwarded_count: number; forward_mode: 'separate' | 'merged' }>('chat/messages/forward/', payload)
 }
 
+export const revokeMessageApi = (messageId: number) => {
+    return instance.post<{ detail: string; message: ChatMessageItem }>(`chat/messages/${messageId}/revoke/`)
+}
+
+export const deleteMessageApi = (messageId: number) => {
+    return instance.post<{ detail: string; message_id: number; conversation: ChatConversationItem }>(`chat/messages/${messageId}/delete/`)
+}
+
+export const restoreRevokedDraftApi = (messageId: number) => {
+    return instance.post<{
+        detail: string
+        draft: {
+            message_type: string
+            content: string
+            payload: Record<string, unknown>
+        }
+    }>(`chat/messages/${messageId}/restore-draft/`)
+}
+
 export const updateGroupConfigApi = (
     conversationId: number,
     payload: { name?: string; avatar?: string; join_approval_required?: boolean; allow_member_invite?: boolean; max_members?: number | null; mute_all?: boolean },

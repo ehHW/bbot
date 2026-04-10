@@ -19,10 +19,6 @@
             <a-form-item label="聊天列表排序">
                 <a-segmented v-model:value="formState.chatListSortMode" :options="chatSortOptions" @change="handleChatSortModeChange" />
             </a-form-item>
-            <a-form-item v-if="isSuperuser" label="隐身巡检模式">
-                <a-switch v-model:checked="formState.chatStealthInspectEnabled" checked-children="开启" un-checked-children="关闭" @change="handleStealthInspectChange" />
-            </a-form-item>
-
             <a-space>
                 <a-button :loading="saving" @click="resetSettings">恢复默认</a-button>
             </a-space>
@@ -34,23 +30,19 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useSettingsStore } from '@/stores/settings'
-import { useUserStore } from '@/stores/user'
 import { getErrorMessage } from '@/utils/error'
 
 const settingsStore = useSettingsStore()
-const userStore = useUserStore()
 const saving = ref(false)
 const skipNextSystemTitleBlur = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 let saveStatusTimer: ReturnType<typeof setTimeout> | null = null
-const isSuperuser = computed(() => userStore.isSuperuser)
 
 const formState = reactive({
     systemTitle: '',
     themeMode: 'light' as 'light' | 'dark',
     chatReceiveNotification: true,
     chatListSortMode: 'recent' as 'recent' | 'unread',
-    chatStealthInspectEnabled: false,
 })
 
 const saveStatusText = computed(() => {
@@ -81,7 +73,6 @@ const syncFromStore = () => {
     formState.themeMode = settingsStore.settings.themeMode
     formState.chatReceiveNotification = settingsStore.settings.chatReceiveNotification
     formState.chatListSortMode = settingsStore.settings.chatListSortMode
-    formState.chatStealthInspectEnabled = settingsStore.settings.chatStealthInspectEnabled
 }
 
 const normalizedSystemTitle = () => formState.systemTitle.trim() || 'Bbot 管理后台'
@@ -122,7 +113,6 @@ const saveChatSettings = async () => {
             themeMode: formState.themeMode,
             chatReceiveNotification: formState.chatReceiveNotification,
             chatListSortMode: formState.chatListSortMode,
-            chatStealthInspectEnabled: isSuperuser.value ? formState.chatStealthInspectEnabled : false,
         })
         syncFromStore()
         markSaveStatus('saved')
@@ -162,13 +152,11 @@ const handleChatSortModeChange = async () => {
     await saveChatSettings()
 }
 
-const handleStealthInspectChange = async () => {
-    await saveChatSettings()
-}
-
 const resetSettings = async () => {
     markSaveStatus('saving')
+    const chatStealthInspectEnabled = settingsStore.chatStealthInspectEnabled
     settingsStore.reset()
+    settingsStore.save({ chatStealthInspectEnabled })
     syncFromStore()
     await saveChatSettings()
     await saveLocalSettings()

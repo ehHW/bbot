@@ -1,39 +1,50 @@
 <template>
     <a-card class="file-manage-page">
         <a-tabs v-model:activeKey="activeTab" class="file-upload-tabs" @change="handleTabChange">
-            <a-tab-pane key="manage" tab="文件管理">
-                <a-space style="margin-bottom: 12px; width: 100%; justify-content: space-between" wrap>
-                    <a-breadcrumb>
-                        <a-breadcrumb-item v-for="item in fileStore.breadcrumbs" :key="String(item.id ?? 'root')">
-                            <a @click="goToBreadcrumb(item.id)">{{ item.name }}</a>
-                        </a-breadcrumb-item>
-                    </a-breadcrumb>
+            <a-tab-pane key="user" tab="我的资源" />
+            <a-tab-pane v-if="userStore.isSuperuser" key="system" tab="系统资源" />
+            <a-tab-pane key="upload" tab="文件上传" force-render />
+        </a-tabs>
 
-                    <a-space>
-                        <template v-if="isRecycleBinView">
-                            <a-button @click="restoreSelected" :disabled="selectedRecycleIds.length === 0">批量还原</a-button>
+        <template v-if="activeTab !== 'upload'">
+            <a-space style="margin-bottom: 12px; width: 100%; justify-content: space-between" wrap>
+                <a-breadcrumb>
+                    <a-breadcrumb-item
+                        v-for="item in fileStore.breadcrumbs"
+                        :key="`${String(item.id ?? 'root')}-${String(item.owner_user_id ?? 'self')}`"
+                    >
+                        <a @click="goToBreadcrumb(item)">{{ item.name }}</a>
+                    </a-breadcrumb-item>
+                </a-breadcrumb>
+
+                <a-space>
+                    <template v-if="isRecycleBinView">
+                        <a-button @click="restoreSelected" :disabled="selectedRecycleIds.length === 0">批量还原</a-button>
+                        <template v-if="isSystemScope">
                             <a-button danger @click="clearSelected" :disabled="selectedRecycleIds.length === 0">批量彻底删除</a-button>
                             <a-button danger @click="clearAllRecycleBin">清空回收站</a-button>
                         </template>
-                        <a-button type="primary" @click="openCreateFolder">新建文件夹</a-button>
-                        <a-button @click="refresh">刷新</a-button>
-                    </a-space>
+                    </template>
+                    <a-button v-if="!isSystemScope" type="primary" @click="openCreateFolder">新建文件夹</a-button>
+                    <a-button @click="refresh">刷新</a-button>
                 </a-space>
+            </a-space>
 
-                <a-space style="margin-bottom: 12px; width: 100%" wrap>
-                    <a-auto-complete
-                        v-model:value="searchKeyword"
-                        placeholder="搜索文件名..."
-                        :options="searchOptions"
-                        :loading="searchLoading"
-                        style="width: 300px"
-                        @input="onSearchInput"
-                        @select="onSearchSelect"
-                    />
-                    <a-button type="primary" @click="doFullSearch" :loading="searchLoading">搜索全部</a-button>
-                    <a-button @click="resetSearch" :loading="searchLoading">重置</a-button>
-                </a-space>
+            <a-space style="margin-bottom: 12px; width: 100%" wrap>
+                <a-auto-complete
+                    v-model:value="searchKeyword"
+                    placeholder="搜索文件名..."
+                    :options="searchOptions"
+                    :loading="searchLoading"
+                    style="width: 300px"
+                    @input="onSearchInput"
+                    @select="onSearchSelect"
+                />
+                <a-button type="primary" @click="doFullSearch" :loading="searchLoading">搜索全部</a-button>
+                <a-button @click="resetSearch" :loading="searchLoading">重置</a-button>
+            </a-space>
 
+            <div ref="tableContainerRef" class="file-table-container">
                 <a-table
                     :columns="columns"
                     :data-source="tableData"
@@ -41,6 +52,7 @@
                     :loading="fileStore.loadingEntries || searchLoading"
                     :pagination="{ pageSize: 12 }"
                     :row-selection="rowSelection"
+                    :scroll="tableScrollConfig"
                 >
                     <template #bodyCell="{ column, record }">
                         <template v-if="column.key === 'name'">
@@ -48,6 +60,9 @@
                         </template>
                         <template v-else-if="column.key === 'path'">
                             <span class="search-path">{{ formatPath(record) }}</span>
+                        </template>
+                        <template v-else-if="column.key === 'owner'">
+                            <span>{{ record.owner_name || '-' }}</span>
                         </template>
                         <template v-else-if="column.key === 'size'">
                             <span>{{ record.is_dir ? '-' : formatFileSize(record.file_size) }}</span>
@@ -63,25 +78,19 @@
                         <template v-else-if="column.key === 'actions'">
                             <a-space>
                                 <a v-if="isRecycleBinView" @click="restoreItem(record.id)">还原</a>
-                                <a v-else-if="!record.is_system" @click="openRename(record)">编辑</a>
+                                <a v-else-if="!isSystemScope && !record.is_system && !record.is_virtual && isEditableResource(record)" @click="openRename(record)">编辑</a>
                                 <a v-if="!record.is_dir && record.url" :href="record.url" target="_blank" rel="noopener noreferrer">查看</a>
-                                <a-popconfirm
-                                    v-if="isRecycleBinView || !record.is_system"
-                                    :title="isRecycleBinView ? '确认彻底删除？' : '确认删除？'"
-                                    @confirm="onDelete(record.id)"
-                                >
+                                <a-popconfirm v-if="canDeleteRecord(record)" :title="deleteConfirmTitle" @confirm="onDelete(record.id)">
                                     <a style="color: #ff4d4f">删除</a>
                                 </a-popconfirm>
                             </a-space>
                         </template>
                     </template>
                 </a-table>
-            </a-tab-pane>
+            </div>
+        </template>
 
-            <a-tab-pane key="upload" tab="文件上传" force-render>
-                <UploadTaskPanel />
-            </a-tab-pane>
-        </a-tabs>
+        <UploadTaskPanel v-else />
     </a-card>
 
     <a-modal v-model:open="createFolderOpen" title="新建文件夹" ok-text="创建" cancel-text="取消" @ok="submitCreateFolder">
@@ -96,11 +105,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
+import type { FileEntryItem, FileManageScope, SearchFileEntryItem } from '@/api/upload'
 import { message } from 'ant-design-vue'
 import FileNameCell from '@/components/common/FileNameCell.vue'
 import UploadTaskPanel from '@/views/FileManage/components/UploadTaskPanel.vue'
 import { useFileStore } from '@/stores/file'
+import { useUserStore } from '@/stores/user'
 import { getErrorMessage } from '@/utils/error'
 import { formatFileSize } from '@/utils/fileFormatter'
 import { formatDateTime } from '@/utils/timeFormatter'
@@ -108,6 +118,7 @@ import { trimText } from '@/validators/common'
 import { searchFileEntriesApi } from '@/api/upload'
 
 const fileStore = useFileStore()
+const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
 const createFolderOpen = ref(false)
@@ -116,7 +127,7 @@ const renameOpen = ref(false)
 const renameName = ref('')
 const renameId = ref<number | null>(null)
 const selectedRecycleIds = ref<number[]>([])
-const activeTab = ref<'manage' | 'upload'>(route.query.tab === 'upload' ? 'upload' : 'manage')
+const activeTab = ref<'user' | 'system' | 'upload'>('user')
 
 const searchKeyword = ref('')
 const suggestResults = ref<SearchFileEntryItem[]>([])
@@ -124,6 +135,43 @@ const searchResults = ref<SearchFileEntryItem[]>([])
 const isSearchMode = ref(false)
 const searchLoading = ref(false)
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const fileScope = computed<FileManageScope>(() => (activeTab.value === 'system' ? 'system' : 'user'))
+const isSystemScope = computed(() => fileScope.value === 'system')
+const deleteConfirmTitle = computed(() => (isSystemScope.value ? '确认彻底删除？' : '确认删除？'))
+const isEditableResource = (item: FileEntryItem | SearchFileEntryItem) => item.resource_kind !== 'chat_attachment'
+const canDeleteRecord = (item: FileEntryItem | SearchFileEntryItem) => {
+    if (item.is_virtual || !isEditableResource(item)) {
+        return false
+    }
+    if (isSystemScope.value) {
+        return true
+    }
+    return !isRecycleBinView.value && !item.is_system
+}
+const tableContainerRef = ref<HTMLElement | null>(null)
+const tableScrollY = ref(360)
+let tableResizeObserver: ResizeObserver | null = null
+
+const updateTableScrollY = () => {
+    const container = tableContainerRef.value
+    if (!container) {
+        return
+    }
+    tableScrollY.value = Math.max(220, container.clientHeight - 74)
+}
+
+const tableScrollConfig = computed(() => ({ y: tableScrollY.value, scrollToFirstRowOnChange: true }))
+
+const normalizeTab = (rawTab: unknown): 'user' | 'system' | 'upload' => {
+    if (rawTab === 'upload') {
+        return 'upload'
+    }
+    if (rawTab === 'system' && userStore.isSuperuser) {
+        return 'system'
+    }
+    return 'user'
+}
 
 const getNormalizedKeyword = () => {
     const raw = typeof searchKeyword.value === 'string' ? searchKeyword.value : String(searchKeyword.value ?? '')
@@ -145,6 +193,7 @@ const columns = computed(() => {
     return [
         { title: '名称', dataIndex: 'display_name', key: 'name', width: 260 },
         { title: '路径', key: 'path', width: 320 },
+        ...(isSystemScope.value ? [{ title: '归属用户', key: 'owner', width: 180 }] : []),
         { title: '类型', key: 'type', width: 120 },
         { title: '大小', key: 'size', width: 120 },
         { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', width: 220 },
@@ -198,7 +247,7 @@ const performSearch = async () => {
 
     searchLoading.value = true
     try {
-        const { data } = await searchFileEntriesApi(keyword, 50)
+        const { data } = await searchFileEntriesApi(keyword, 50, fileScope.value, fileStore.currentOwnerUserId)
         suggestResults.value = data.items
     } finally {
         searchLoading.value = false
@@ -237,7 +286,7 @@ const doFullSearch = async () => {
 
     searchLoading.value = true
     try {
-        const { data } = await searchFileEntriesApi(keyword, 200)
+        const { data } = await searchFileEntriesApi(keyword, 200, fileScope.value, fileStore.currentOwnerUserId)
         searchResults.value = data.items
         isSearchMode.value = true
         if (searchResults.value.length === 0) {
@@ -260,7 +309,7 @@ const navigateToFile = async (item: SearchFileEntryItem) => {
     if (item.is_dir) {
         await fileStore.enterFolder(item)
     } else {
-        await fileStore.loadEntries(item.parent_id ?? null)
+        await fileStore.loadEntries(item.parent_id ?? null, item.owner_user_id ?? null)
     }
     clearSearchState()
 }
@@ -272,13 +321,13 @@ const refresh = async () => {
         await doFullSearch()
         return
     }
-    await fileStore.loadEntries(fileStore.currentParentId)
+    await fileStore.loadEntries(fileStore.currentParentId, fileStore.currentOwnerUserId)
     selectedRecycleIds.value = []
 }
 
-const goToBreadcrumb = async (id: number | null) => {
+const goToBreadcrumb = async (item: { id: number | null; owner_user_id?: number | null }) => {
     clearSearchState()
-    await fileStore.goToBreadcrumb(id)
+    await fileStore.goToBreadcrumb(item)
 }
 
 const enterFolder = async (item: FileEntryItem) => {
@@ -316,7 +365,7 @@ const onDelete = async (id: number) => {
     try {
         const result = await fileStore.deleteEntry(id)
         selectedRecycleIds.value = selectedRecycleIds.value.filter((item) => item !== id)
-        message.success(result.detail || (isRecycleBinView.value ? '已彻底删除' : '已移入回收站'))
+        message.success(result.detail || (isSystemScope.value || isRecycleBinView.value ? '已彻底删除' : '已移入回收站'))
     } catch (error: unknown) {
         message.error(getErrorMessage(error, '删除失败'))
     }
@@ -391,48 +440,101 @@ const submitRename = async () => {
 }
 
 const handleTabChange = async (key: string) => {
-    const nextTab = key === 'upload' ? 'upload' : 'manage'
+    const nextTab = normalizeTab(key)
     activeTab.value = nextTab
     const nextQuery = { ...route.query }
-    if (nextTab === 'upload') {
-        nextQuery.tab = 'upload'
-    } else {
-        delete nextQuery.tab
-    }
-    await router.replace({ path: '/file-manage', query: nextQuery })
+    nextQuery.tab = nextTab
+    await router.replace({ path: route.path, query: nextQuery })
 }
 
 watch(
     () => route.query.tab,
     (tab) => {
-        activeTab.value = tab === 'upload' ? 'upload' : 'manage'
+        activeTab.value = normalizeTab(tab)
     },
     { immediate: true },
 )
 
-onMounted(async () => {
-    await fileStore.loadEntries(null)
+watch(
+    activeTab,
+    async (tab) => {
+        if (tab === 'upload') {
+            clearSearchState()
+            selectedRecycleIds.value = []
+            return
+        }
+        const scope = tab === 'system' ? 'system' : 'user'
+        fileStore.setScope(scope)
+        clearSearchState()
+        await fileStore.loadEntries(null)
+        updateTableScrollY()
+    },
+    { immediate: true },
+)
+
+onMounted(() => {
+    updateTableScrollY()
+    if (typeof ResizeObserver !== 'undefined') {
+        tableResizeObserver = new ResizeObserver(() => {
+            updateTableScrollY()
+        })
+        if (tableContainerRef.value) {
+            tableResizeObserver.observe(tableContainerRef.value)
+        }
+    }
+    window.addEventListener('resize', updateTableScrollY)
 })
 
 onBeforeUnmount(() => {
     if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer)
     }
+    if (tableResizeObserver) {
+        tableResizeObserver.disconnect()
+    }
+    window.removeEventListener('resize', updateTableScrollY)
 })
 </script>
 
 <style scoped>
 .file-manage-page {
     height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 :deep(.ant-card-body) {
     height: 100%;
-    overflow: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .file-upload-tabs {
-    min-height: 100%;
+    flex: 0 0 auto;
+}
+
+.file-table-container {
+    flex: 1;
+    min-height: 0;
+}
+
+:deep(.ant-tabs-content-holder) {
+    flex: 1;
+    min-height: 0;
+}
+
+:deep(.ant-table-wrapper) {
+    height: 100%;
+}
+
+:deep(.ant-spin-nested-loading) {
+    height: 100%;
+}
+
+:deep(.ant-spin-container) {
+    height: 100%;
 }
 
 .search-path {

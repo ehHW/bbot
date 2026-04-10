@@ -8,6 +8,17 @@ export type ChatRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled'
 export type ChatJoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'canceled'
 export type ChatLocalMessageStatus = 'sending' | 'failed'
 
+export interface ChatVideoProcessingMetadata {
+    status?: string
+    codec?: string
+    duration_seconds?: number | null
+    width?: number | null
+    height?: number | null
+    playlist_url?: string
+    thumbnail_url?: string
+    error?: string
+}
+
 export interface ChatUserBrief {
     id: number
     username: string
@@ -72,6 +83,16 @@ export interface ChatMessageAssetPayload {
     mime_type?: string
     file_size?: number
     url?: string
+    stream_url?: string
+    thumbnail_url?: string
+    processing_status?: string
+    upload_progress?: number
+    upload_phase?: 'uploading' | 'sending'
+    local_upload_id?: string
+    extra_metadata?: {
+        video_processing?: ChatVideoProcessingMetadata
+        [key: string]: unknown
+    }
 }
 
 export interface ChatMessageReplyPayload {
@@ -80,6 +101,7 @@ export interface ChatMessageReplyPayload {
     message_type: ChatMessageType
     sender_name: string
     content_preview: string
+    is_revoked?: boolean
 }
 
 export interface ChatMessageForwardedPayload {
@@ -121,12 +143,16 @@ export interface ChatGroupInvitationPayload {
 
 export interface ChatComposerAttachmentToken {
     token_id: string
-    source_asset_reference_id: number
+    source_asset_reference_id?: number
     display_name: string
     media_type: string
     mime_type?: string
     file_size?: number
     url?: string
+    stream_url?: string
+    thumbnail_url?: string
+    processing_status?: string
+    local_upload_id?: string
 }
 
 export type ChatComposerSegment =
@@ -172,6 +198,21 @@ export interface ChatFriendshipItem {
         id: number
         show_in_list: boolean
     } | null
+}
+
+export interface ChatFriendNoticeItem {
+    id: string
+    title: string
+    description: string
+    created_at: string
+    payload: Record<string, unknown>
+}
+
+export interface ChatMessageRevokedPayload {
+    revoked_at: string
+    revoked_by_user_id: number | null
+    can_restore_once?: boolean
+    restore_used?: boolean
 }
 
 export interface ChatConversationMemberItem {

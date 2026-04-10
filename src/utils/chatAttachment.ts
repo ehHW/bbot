@@ -8,6 +8,9 @@ export interface ChatAttachmentSendPayload {
     mimeType?: string
     fileSize?: number
     url?: string
+    streamUrl?: string
+    thumbnailUrl?: string
+    processingStatus?: string
 }
 
 export function inferAttachmentMediaType(file: Pick<File, 'type'>, fallback?: string) {
@@ -15,7 +18,13 @@ export function inferAttachmentMediaType(file: Pick<File, 'type'>, fallback?: st
     if (normalized) {
         return normalized
     }
-    return file.type.startsWith('image/') ? 'image' : 'file'
+    if (file.type.startsWith('image/')) {
+        return 'image'
+    }
+    if (file.type.startsWith('video/')) {
+        return 'video'
+    }
+    return 'file'
 }
 
 export function buildAttachmentSendPayloadFromEntry(item: FileEntryItem | SearchFileEntryItem): ChatAttachmentSendPayload {
@@ -30,6 +39,8 @@ export function buildAttachmentSendPayloadFromEntry(item: FileEntryItem | Search
         mimeType: item.asset?.mime_type || item.asset_reference?.asset?.mime_type || undefined,
         fileSize: item.asset?.file_size || item.file_size,
         url: item.asset?.url || item.asset_reference?.asset?.url || item.url,
+        streamUrl: String(((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>)?.video_processing && (((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown>).playlist_url || ''),
+        thumbnailUrl: String(((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>)?.video_processing && (((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown>).thumbnail_url || ''),
     }
 }
 
@@ -45,5 +56,8 @@ export function buildAttachmentSendPayloadFromUploadResult(result: UploadFileRes
         mimeType: result.file?.asset?.mime_type || file.type || undefined,
         fileSize: result.file?.asset?.file_size || result.file?.file_size || file.size,
         url: result.file?.asset?.url || result.file?.url || result.url,
+        streamUrl: String((((result.file?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown> | undefined)?.playlist_url || ''),
+        thumbnailUrl: String((((result.file?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown> | undefined)?.thumbnail_url || ''),
+        processingStatus: String((((result.file?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown> | undefined)?.status || ''),
     }
 }

@@ -50,7 +50,7 @@ const formatPreview = (entry: ChatMessageRecordItem) => {
 .chat-record-card {
     display: flex;
     flex-direction: column;
-    width: min(320px, 72vw);
+    width: min(260px, 72vw);
     min-width: 220px;
     padding: 0;
     border: 1px solid color-mix(in srgb, var(--chat-panel-border) 86%, var(--chat-accent) 14%);
