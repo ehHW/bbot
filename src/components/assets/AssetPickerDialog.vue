@@ -116,6 +116,10 @@ import { computed, ref, watch } from "vue";
 import { message } from "ant-design-vue";
 import { getFileEntriesApi, searchFileEntriesApi } from "@/api/upload";
 import type { FileEntryItem, SearchFileEntryItem } from "@/api/upload";
+import {
+    buildAssetPickerSelection,
+    type AssetPickerSelection,
+} from "@/components/assets/assetPickerAdapter";
 import FileNameCell from "@/components/common/FileNameCell.vue";
 import { formatFileSize } from "@/utils/fileFormatter";
 import { formatDateTime } from "@/utils/timeFormatter";
@@ -127,7 +131,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     "update:open": [value: boolean];
-    select: [item: FileEntryItem | SearchFileEntryItem];
+    select: [item: AssetPickerSelection];
 }>();
 
 const entries = ref<FileEntryItem[]>([]);
@@ -333,7 +337,7 @@ const selectItem = (item: FileEntryItem | SearchFileEntryItem) => {
         message.warning("该文件缺少资产引用，暂时无法发送");
         return;
     }
-    emit("select", item);
+    emit("select", buildAssetPickerSelection(item));
     emit("update:open", false);
 };
 

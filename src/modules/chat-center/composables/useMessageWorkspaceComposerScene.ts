@@ -1,12 +1,12 @@
 import { message } from "ant-design-vue";
 import { ref, type ComputedRef, type Ref } from "vue";
-import type { FileEntryItem, SearchFileEntryItem } from "@/api/upload";
+import type { AssetPickerSelection } from "@/components/assets/assetPickerAdapter";
 import type {
     ChatComposerAttachmentToken,
     ChatMessageItem,
 } from "@/types/chat";
 import {
-    buildAttachmentSendPayloadFromEntry,
+    buildAttachmentSendPayloadFromSelection,
     buildAttachmentSendPayloadFromUploadResult,
 } from "@/utils/chatAttachment";
 import { getErrorMessage } from "@/utils/error";
@@ -265,9 +265,9 @@ export function useMessageWorkspaceComposerScene(
         assetPickerOpen.value = true;
     };
 
-    const handleAssetPickerSelect = async (item: FileEntryItem | SearchFileEntryItem) => {
+    const handleAssetPickerSelect = async (selection: AssetPickerSelection) => {
         try {
-            const payload = buildAttachmentSendPayloadFromEntry(item);
+            const payload = buildAttachmentSendPayloadFromSelection(selection);
             insertAttachmentToken(
                 buildComposerAttachmentToken({
                     sourceAssetReferenceId: payload.sourceAssetReferenceId,

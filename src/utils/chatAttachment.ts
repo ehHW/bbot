@@ -1,4 +1,5 @@
 import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
+import { buildAssetPickerSelection, type AssetPickerSelection } from '@/components/assets/assetPickerAdapter'
 import type { UploadFileResult } from '@/utils/fileUploader'
 
 export interface ChatAttachmentSendPayload {
@@ -11,6 +12,20 @@ export interface ChatAttachmentSendPayload {
     streamUrl?: string
     thumbnailUrl?: string
     processingStatus?: string
+}
+
+export function buildAttachmentSendPayloadFromSelection(selection: AssetPickerSelection): ChatAttachmentSendPayload {
+    return {
+        sourceAssetReferenceId: selection.assetReferenceId,
+        displayName: selection.displayName,
+        mediaType: selection.mediaType,
+        mimeType: selection.mimeType,
+        fileSize: selection.fileSize,
+        url: selection.url,
+        streamUrl: selection.streamUrl,
+        thumbnailUrl: selection.thumbnailUrl,
+        processingStatus: selection.processingStatus || undefined,
+    }
 }
 
 export function inferAttachmentMediaType(file: Pick<File, 'type'>, fallback?: string) {
@@ -28,20 +43,7 @@ export function inferAttachmentMediaType(file: Pick<File, 'type'>, fallback?: st
 }
 
 export function buildAttachmentSendPayloadFromEntry(item: FileEntryItem | SearchFileEntryItem): ChatAttachmentSendPayload {
-    const assetReferenceId = Number(item.asset_reference_id || 0)
-    if (!assetReferenceId) {
-        throw new Error('该文件缺少资产引用，暂时无法发送')
-    }
-    return {
-        sourceAssetReferenceId: assetReferenceId,
-        displayName: item.display_name,
-        mediaType: item.asset?.media_type || item.asset_reference?.asset?.media_type || 'file',
-        mimeType: item.asset?.mime_type || item.asset_reference?.asset?.mime_type || undefined,
-        fileSize: item.asset?.file_size || item.file_size,
-        url: item.asset?.url || item.asset_reference?.asset?.url || item.url,
-        streamUrl: String(((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>)?.video_processing && (((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown>).playlist_url || ''),
-        thumbnailUrl: String(((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>)?.video_processing && (((item.asset?.extra_metadata || item.asset_reference?.asset?.extra_metadata || {}) as Record<string, unknown>).video_processing as Record<string, unknown>).thumbnail_url || ''),
-    }
+    return buildAttachmentSendPayloadFromSelection(buildAssetPickerSelection(item))
 }
 
 export function buildAttachmentSendPayloadFromUploadResult(result: UploadFileResult, file: Pick<File, 'name' | 'size' | 'type'>): ChatAttachmentSendPayload {
