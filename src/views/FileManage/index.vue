@@ -227,7 +227,10 @@
                                     >编辑</a
                                 >
                                 <a
-                                    v-if="!record.is_dir && getEntryPreviewUrl(record)"
+                                    v-if="
+                                        !record.is_dir &&
+                                        getEntryPreviewUrl(record)
+                                    "
                                     :href="getEntryPreviewUrl(record)"
                                     target="_blank"
                                     rel="noopener noreferrer"
