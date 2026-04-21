@@ -63,7 +63,12 @@
 import { CaretRightFilled, FileOutlined } from "@ant-design/icons-vue";
 import { computed } from "vue";
 import type { AssetPreviewModel } from "@/types/assets";
-import { formatFileSize } from "@/utils/fileFormatter";
+import {
+    canAssetPreviewImage,
+    canAssetPreviewVideo,
+    formatAssetPreviewFileSize,
+    getAssetPreviewPrimaryUrl,
+} from "@/utils/assetPreview";
 import VideoAttachmentThumbnail from "@/views/Chat/components/VideoAttachmentThumbnail.vue";
 
 const props = withDefaults(
@@ -102,30 +107,17 @@ const resolvedPreview = computed<AssetPreviewModel>(
 );
 
 const isImagePreview = computed(
-    () =>
-        resolvedPreview.value.mediaType === "image" &&
-        Boolean(resolvedPreview.value.url),
+    () => canAssetPreviewImage(resolvedPreview.value),
 );
 
-const isVideoPreview = computed(() => {
-    const mediaType = String(resolvedPreview.value.mediaType || "")
-        .trim()
-        .toLowerCase();
-    const mimeType = String(resolvedPreview.value.mimeType || "")
-        .trim()
-        .toLowerCase();
-    return (
-        Boolean(resolvedPreview.value.url || resolvedPreview.value.streamUrl) &&
-        (mediaType === "video" || mimeType.startsWith("video/"))
-    );
-});
+const isVideoPreview = computed(() => canAssetPreviewVideo(resolvedPreview.value));
 
 const hasMediaPreview = computed(
     () => isImagePreview.value || isVideoPreview.value,
 );
 
 const previewSourceUrl = computed(
-    () => resolvedPreview.value.url || resolvedPreview.value.streamUrl || "",
+    () => getAssetPreviewPrimaryUrl(resolvedPreview.value),
 );
 
 const mediaBoxStyle = computed(() => {
@@ -145,10 +137,9 @@ const normalizedUploadProgress = computed(() =>
     Math.min(100, Math.max(0, Math.round(Number(props.uploadProgress || 0)))),
 );
 
-const fileSizeLabel = computed(() => {
-    const fileSize = Number(resolvedPreview.value.fileSize || 0);
-    return fileSize > 0 ? formatFileSize(fileSize) : "大小未知";
-});
+const fileSizeLabel = computed(() =>
+    formatAssetPreviewFileSize(resolvedPreview.value),
+);
 </script>
 
 <style scoped>

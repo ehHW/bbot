@@ -87,7 +87,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { buildAssetPreviewFromChatRecordEntry } from "@/utils/assetPreview";
+import {
+    buildAssetPreviewFromChatRecordEntry,
+    canAssetPreviewImage,
+    canAssetPreviewVideo,
+    getAssetPreviewPrimaryUrl,
+    isPreviewableAssetPreview,
+} from "@/utils/assetPreview";
 import ChatAssetCard from "@/views/Chat/components/ChatAssetCard.vue";
 import ChatRecordCard from "@/views/Chat/components/ChatRecordCard.vue";
 import type {
@@ -122,57 +128,18 @@ const getEntryPreview = (entry: ChatMessageRecordItem) =>
 
 const hasMediaPreview = (entry: ChatMessageRecordItem) => {
     const preview = getEntryPreview(entry);
-    const mediaType = String(preview.mediaType || "")
-        .trim()
-        .toLowerCase();
-    const mimeType = String(preview.mimeType || "")
-        .trim()
-        .toLowerCase();
-
-    if (mediaType === "image") {
-        return Boolean(preview.url);
-    }
-
-    return (
-        Boolean(preview.url || preview.streamUrl) &&
-        (mediaType === "video" || mimeType.startsWith("video/"))
-    );
+    return canAssetPreviewImage(preview) || canAssetPreviewVideo(preview);
 };
 
-const showVideoPlayOverlay = (entry: ChatMessageRecordItem) => {
-    const preview = getEntryPreview(entry);
-    const mediaType = String(preview.mediaType || "")
-        .trim()
-        .toLowerCase();
-    const mimeType = String(preview.mimeType || "")
-        .trim()
-        .toLowerCase();
-    return (
-        Boolean(preview.url || preview.streamUrl) &&
-        (mediaType === "video" || mimeType.startsWith("video/"))
-    );
-};
+const showVideoPlayOverlay = (entry: ChatMessageRecordItem) =>
+    canAssetPreviewVideo(getEntryPreview(entry));
 
 const getEntryPreviewUrl = (entry: ChatMessageRecordItem) => {
-    const preview = getEntryPreview(entry);
-    return preview.url || preview.streamUrl || "";
+    return getAssetPreviewPrimaryUrl(getEntryPreview(entry));
 };
 
 const isPreviewableAsset = (entry: ChatMessageRecordItem) => {
-    const preview = getEntryPreview(entry);
-    const mediaType = String(preview.mediaType || "")
-        .trim()
-        .toLowerCase();
-    const mimeType = String(preview.mimeType || "")
-        .trim()
-        .toLowerCase();
-    return (
-        mediaType === "image" ||
-        mediaType === "video" ||
-        mediaType === "audio" ||
-        mimeType.startsWith("video/") ||
-        mimeType.startsWith("audio/")
-    );
+    return isPreviewableAssetPreview(getEntryPreview(entry));
 };
 
 const triggerAssetDownload = (entry: ChatMessageRecordItem) => {

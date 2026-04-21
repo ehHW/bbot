@@ -3,8 +3,14 @@ import {
     buildAssetPreviewFromChatMessageAssetPayload,
     buildAssetPreviewFromChatRecordEntry,
     buildAssetPreviewFromFileEntry,
+    canAssetPreviewImage,
+    canAssetPreviewVideo,
     formatAssetPreviewFileSize,
     getAssetPreviewPrimaryUrl,
+    getAssetPreviewSourceUrl,
+    getAssetPreviewStreamUrl,
+    hasAssetPreviewPlaybackSource,
+    isPreviewableAssetPreview,
 } from '@/utils/assetPreview'
 
 describe('assetPreview', () => {
@@ -142,8 +148,8 @@ describe('assetPreview', () => {
         })
     })
 
-    it('formats shared size and primary url from preview contract', () => {
-        expect(formatAssetPreviewFileSize({
+    it('formats shared size and resolves preview urls from preview contract', () => {
+        const imagePreview = {
             displayName: '图片',
             mediaType: 'image',
             mimeType: 'image/png',
@@ -157,7 +163,11 @@ describe('assetPreview', () => {
             durationSeconds: undefined,
             isDirectory: false,
             isVirtual: false,
-        })).toBe('4.00 KB')
+        }
+
+        expect(formatAssetPreviewFileSize(imagePreview)).toBe('4.00 KB')
+        expect(getAssetPreviewSourceUrl(imagePreview)).toBe('/uploads/demo.png')
+        expect(canAssetPreviewImage(imagePreview)).toBe(true)
 
         expect(formatAssetPreviewFileSize({
             displayName: '目录',
@@ -175,7 +185,7 @@ describe('assetPreview', () => {
             isVirtual: false,
         })).toBe('-')
 
-        expect(getAssetPreviewPrimaryUrl({
+        const videoPreview = {
             displayName: '视频',
             mediaType: 'video',
             mimeType: 'video/mp4',
@@ -189,6 +199,27 @@ describe('assetPreview', () => {
             durationSeconds: 35,
             isDirectory: false,
             isVirtual: false,
-        })).toBe('/media/demo.m3u8')
+        }
+
+        expect(getAssetPreviewStreamUrl(videoPreview)).toBe('/media/demo.m3u8')
+        expect(getAssetPreviewPrimaryUrl(videoPreview)).toBe('/media/demo.m3u8')
+        expect(hasAssetPreviewPlaybackSource(videoPreview)).toBe(true)
+        expect(canAssetPreviewVideo(videoPreview)).toBe(true)
+
+        expect(isPreviewableAssetPreview({
+            displayName: '语音',
+            mediaType: 'audio',
+            mimeType: 'audio/mpeg',
+            fileSize: 1024,
+            url: '/uploads/demo.mp3',
+            streamUrl: undefined,
+            thumbnailUrl: undefined,
+            processingStatus: undefined,
+            width: undefined,
+            height: undefined,
+            durationSeconds: 12,
+            isDirectory: false,
+            isVirtual: false,
+        })).toBe(true)
     })
 })

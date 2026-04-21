@@ -99,10 +99,64 @@ export function normalizeAssetPreviewModel(input: AssetPreviewInput): AssetPrevi
     }
 }
 
+const getNormalizedAssetPreviewMediaType = (
+    preview?: AssetPreviewModel | null,
+) => normalizeText(preview?.mediaType)?.toLowerCase() || ''
+
+const getNormalizedAssetPreviewMimeType = (
+    preview?: AssetPreviewModel | null,
+) => normalizeText(preview?.mimeType)?.toLowerCase() || ''
+
+export function getAssetPreviewSourceUrl(
+    preview?: AssetPreviewModel | null,
+) {
+    return normalizeText(preview?.url) || ''
+}
+
+export function getAssetPreviewStreamUrl(
+    preview?: AssetPreviewModel | null,
+) {
+    return normalizeText(preview?.streamUrl) || ''
+}
+
 export function getAssetPreviewPrimaryUrl(
     preview?: AssetPreviewModel | null,
 ) {
-    return normalizeText(preview?.url) || normalizeText(preview?.streamUrl) || ''
+    return getAssetPreviewSourceUrl(preview) || getAssetPreviewStreamUrl(preview)
+}
+
+export function hasAssetPreviewPlaybackSource(
+    preview?: AssetPreviewModel | null,
+) {
+    return Boolean(getAssetPreviewPrimaryUrl(preview))
+}
+
+export function canAssetPreviewImage(
+    preview?: AssetPreviewModel | null,
+) {
+    return getNormalizedAssetPreviewMediaType(preview) === 'image' && Boolean(getAssetPreviewSourceUrl(preview))
+}
+
+export function canAssetPreviewVideo(
+    preview?: AssetPreviewModel | null,
+) {
+    const mediaType = getNormalizedAssetPreviewMediaType(preview)
+    const mimeType = getNormalizedAssetPreviewMimeType(preview)
+    return hasAssetPreviewPlaybackSource(preview) && (mediaType === 'video' || mimeType.startsWith('video/'))
+}
+
+export function isPreviewableAssetPreview(
+    preview?: AssetPreviewModel | null,
+) {
+    const mediaType = getNormalizedAssetPreviewMediaType(preview)
+    const mimeType = getNormalizedAssetPreviewMimeType(preview)
+    return (
+        mediaType === 'image'
+        || mediaType === 'video'
+        || mediaType === 'audio'
+        || mimeType.startsWith('video/')
+        || mimeType.startsWith('audio/')
+    )
 }
 
 export function formatAssetPreviewFileSize(
