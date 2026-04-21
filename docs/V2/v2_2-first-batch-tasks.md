@@ -47,11 +47,12 @@ V2.2 首批只做三件事：
 ### 进行中
 
 - A1 统一资产选择器交互边界：聊天附件、资源中心和上传目标目录三条入口已统一，但“保存到资源中心”目标选择等特殊场景还没完全并到同一套交互层
-- A2 统一资产预览与元信息展示最小模型：`AssetPreviewModel`、`assetPreview`、`FileNameCell` 预览消费和 upload task preview 已起步，但聊天消息气泡和更多 asset card 还没完全切到同一份 preview 数据
+- A2 统一资产预览与元信息展示最小模型：`AssetPreviewModel`、`assetPreview`、`FileNameCell`、聊天消息气泡和聊天记录附件卡片已切到同一份 preview 数据，后续主要剩资源中心更多 card 的继续收口
+- C2 预留更明确的 assets 域目录与命名约定：后端约定文档已补到 `hyself_server/docs/V2/assets_domain_conventions.md`，后续按文档继续推进物理拆域
 
 ### 未开始
 
-- C2 预留更明确的 assets 域目录与命名约定
+- 暂无
 
 ## 当前可执行清单
 
@@ -70,10 +71,11 @@ V2.2 首批只做三件事：
 ### 进行中
 
 - [ ] 统一聊天、资源中心、上传队列对最小资产 preview 模型的消费
+- [ ] 按 assets 域目录与命名约定继续把新增后端逻辑收进明确边界
 
-### 未开始
+### 已完成
 
-- [ ] 制定后端 assets 域目录与命名约定文档
+- [x] 制定后端 assets 域目录与命名约定文档
 
 ## 阶段划分
 

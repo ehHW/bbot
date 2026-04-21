@@ -78,9 +78,7 @@
                 <span>{{ record.owner_name || "-" }}</span>
             </template>
             <template v-else-if="column.key === 'size'">
-                <span>{{
-                    record.is_dir ? "-" : formatFileSize(record.file_size)
-                }}</span>
+                <span>{{ formatEntryPreviewSize(record) }}</span>
             </template>
             <template v-else-if="column.key === 'type'">
                 <a-tag :color="record.is_dir ? 'blue' : 'green'">
@@ -101,8 +99,8 @@
                         >{{ scene.text.enterActionText }}</a
                     >
                     <a
-                        v-if="!record.is_dir && record.url"
-                        :href="record.url"
+                        v-if="!record.is_dir && getEntryPreviewUrl(record)"
+                        :href="getEntryPreviewUrl(record)"
                         target="_blank"
                         rel="noopener noreferrer"
                         >{{ scene.text.previewActionText }}</a
@@ -117,8 +115,11 @@
 import type { FileEntryItem, SearchFileEntryItem } from "@/api/upload";
 import type { ResolvedAssetPickerWorkspaceScene } from "@/components/assets/assetPickerScenes";
 import FileNameCell from "@/components/common/FileNameCell.vue";
-import { buildAssetPreviewFromFileEntry } from "@/utils/assetPreview";
-import { formatFileSize } from "@/utils/fileFormatter";
+import {
+    buildAssetPreviewFromFileEntry,
+    formatAssetPreviewFileSize,
+    getAssetPreviewPrimaryUrl,
+} from "@/utils/assetPreview";
 import { formatDateTime } from "@/utils/timeFormatter";
 
 type AssetPickerEntry = FileEntryItem | SearchFileEntryItem;
@@ -176,4 +177,10 @@ const handleSearchSelect = async (
 
 const buildEntryPreview = (item: AssetPickerEntry) =>
     buildAssetPreviewFromFileEntry(item);
+
+const formatEntryPreviewSize = (item: AssetPickerEntry) =>
+    formatAssetPreviewFileSize(buildEntryPreview(item));
+
+const getEntryPreviewUrl = (item: AssetPickerEntry) =>
+    getAssetPreviewPrimaryUrl(buildEntryPreview(item));
 </script>

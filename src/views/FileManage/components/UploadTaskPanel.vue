@@ -108,7 +108,11 @@
         >
             <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'displayName'">
-                    <FileNameCell :name="record.displayName" :is-dir="false" :preview="buildTaskPreview(record)" />
+                    <FileNameCell
+                        :name="record.displayName"
+                        :is-dir="false"
+                        :preview="buildTaskPreview(record)"
+                    />
                 </template>
                 <template v-else-if="column.key === 'size'">
                     {{ formatFileSize(record.size) }}
@@ -290,7 +294,10 @@ import { useFileStore } from "@/stores/file";
 import type { UploadTaskItem } from "@/stores/file";
 import { useUserStore } from "@/stores/user";
 import type { FileEntryItem } from "@/api/upload";
-import { buildAssetPreviewFromFileEntry, normalizeAssetPreviewModel } from "@/utils/assetPreview";
+import {
+    buildAssetPreviewFromFileEntry,
+    normalizeAssetPreviewModel,
+} from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
 import { formatFileSize } from "@/utils/fileFormatter";
 
@@ -336,7 +343,8 @@ const folderEntries = computed(() =>
     fileStore.entries.filter((item) => item.is_dir && !item.is_recycle_bin),
 );
 
-const buildFolderPreview = (item: FileEntryItem) => buildAssetPreviewFromFileEntry(item);
+const buildFolderPreview = (item: FileEntryItem) =>
+    buildAssetPreviewFromFileEntry(item);
 
 const buildTaskPreview = (task: UploadTaskItem): AssetPreviewModel => {
     if (task.preview) {

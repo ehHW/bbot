@@ -434,149 +434,29 @@
                                                 isAssetMessage(messageItem)
                                             "
                                         >
-                                            <div
-                                                class="attachment-bubble"
-                                                :class="{
-                                                    self: isSelfMessage(
-                                                        messageItem,
-                                                    ),
-                                                    'attachment-bubble--media':
-                                                        canPreviewImage(
-                                                            messageItem,
-                                                        ) ||
-                                                        canPreviewVideo(
-                                                            messageItem,
-                                                        ),
-                                                }"
-                                            >
-                                                <div
-                                                    v-if="
-                                                        canPreviewImage(
-                                                            messageItem,
-                                                        ) ||
-                                                        canPreviewVideo(
+                                            <div class="attachment-bubble">
+                                                <ChatAssetCard
+                                                    :preview="
+                                                        getAssetPreview(
                                                             messageItem,
                                                         )
                                                     "
-                                                    class="attachment-bubble__media-shell"
-                                                    :style="
-                                                        getAssetPreviewBoxStyle(
+                                                    :show-playable-overlay="
+                                                        showVideoPlayOverlay(
                                                             messageItem,
                                                         )
                                                     "
-                                                >
-                                                    <img
-                                                        v-if="
-                                                            canPreviewImage(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        :src="
-                                                            getAssetPreviewImageUrl(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        :alt="
-                                                            getAssetDisplayName(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        class="attachment-bubble__preview"
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                    />
-                                                    <VideoAttachmentThumbnail
-                                                        v-else-if="
-                                                            canPreviewVideo(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        :poster-url="
-                                                            getVideoPosterUrl(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        :source-url="
-                                                            getAssetMessagePayload(
-                                                                messageItem,
-                                                            )?.url || ''
-                                                        "
-                                                        :alt="
-                                                            getAssetDisplayName(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        class="attachment-bubble__preview attachment-bubble__preview--video"
-                                                    />
-                                                    <div
-                                                        v-if="
-                                                            isAssetUploading(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        class="attachment-bubble__overlay"
-                                                    >
-                                                        <div
-                                                            class="attachment-bubble__progress-ring"
-                                                        >
-                                                            {{
-                                                                getAssetUploadProgress(
-                                                                    messageItem,
-                                                                )
-                                                            }}%
-                                                        </div>
-                                                    </div>
-                                                    <div
-                                                        v-else-if="
-                                                            showVideoPlayOverlay(
-                                                                messageItem,
-                                                            )
-                                                        "
-                                                        class="attachment-bubble__overlay"
-                                                    >
-                                                        <button
-                                                            type="button"
-                                                            class="attachment-bubble__play-button"
-                                                            @click.stop="
-                                                                openAssetMessage(
-                                                                    messageItem,
-                                                                )
-                                                            "
-                                                        >
-                                                            <CaretRightFilled />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    v-else
-                                                    class="attachment-file-card"
-                                                >
-                                                    <span
-                                                        class="attachment-file-card__icon"
-                                                    >
-                                                        <FileOutlined />
-                                                    </span>
-                                                    <div
-                                                        class="attachment-file-card__body"
-                                                    >
-                                                        <span
-                                                            class="attachment-file-card__name"
-                                                            >{{
-                                                                getAssetDisplayName(
-                                                                    messageItem,
-                                                                )
-                                                            }}</span
-                                                        >
-                                                        <span
-                                                            class="attachment-file-card__size"
-                                                            >{{
-                                                                formatAssetFileSize(
-                                                                    messageItem,
-                                                                )
-                                                            }}</span
-                                                        >
-                                                    </div>
-                                                </div>
+                                                    :uploading="
+                                                        isAssetUploading(
+                                                            messageItem,
+                                                        )
+                                                    "
+                                                    :upload-progress="
+                                                        getAssetUploadProgress(
+                                                            messageItem,
+                                                        )
+                                                    "
+                                                />
                                             </div>
                                         </template>
                                         <template v-else>
@@ -1586,7 +1466,7 @@
                 <img
                     v-if="canPreviewImage(previewingAssetMessage)"
                     class="asset-preview-modal__image"
-                    :src="getAssetMessagePayload(previewingAssetMessage)?.url"
+                    :src="getAssetPreviewSourceUrl(previewingAssetMessage)"
                     :alt="assetPreviewTitle"
                 />
                 <ChatVideoPlayer
@@ -1594,16 +1474,14 @@
                     :key="previewingAssetMessage.id"
                     class="asset-preview-modal__video"
                     :source-url="
-                        getAssetMessagePayload(previewingAssetMessage)?.url
+                        getAssetPreviewSourceUrl(previewingAssetMessage)
                     "
                     :stream-url="
-                        getAssetMessagePayload(previewingAssetMessage)
-                            ?.stream_url
+                        getAssetPreviewStreamUrl(previewingAssetMessage)
                     "
                     :poster-url="getVideoPosterUrl(previewingAssetMessage)"
                     :subtitle-tracks="
-                        getAssetMessagePayload(previewingAssetMessage)
-                            ?.subtitle_tracks || []
+                        getAssetSubtitleTracks(previewingAssetMessage)
                     "
                     autoplay
                 />
@@ -1692,10 +1570,8 @@
 <script setup lang="ts">
 import {
     ArrowUpOutlined,
-    CaretRightFilled,
     EditOutlined,
     EllipsisOutlined,
-    FileOutlined,
     MenuOutlined,
     PaperClipOutlined,
     PlusOutlined,
@@ -1723,9 +1599,9 @@ import { useMessageWorkspaceComposerScene } from "@/modules/chat-center/composab
 import { useMessageWorkspaceMemberScene } from "@/modules/chat-center/composables/useMessageWorkspaceMemberScene";
 import { useMessageWorkspaceMessageMenuScene } from "@/modules/chat-center/composables/useMessageWorkspaceMessageMenuScene";
 import { useMessageWorkspaceSettingsScene } from "@/modules/chat-center/composables/useMessageWorkspaceSettingsScene";
+import ChatAssetCard from "@/views/Chat/components/ChatAssetCard.vue";
 import ChatRecordCard from "@/views/Chat/components/ChatRecordCard.vue";
 import ChatVideoPlayer from "@/views/Chat/components/ChatVideoPlayer.vue";
-import VideoAttachmentThumbnail from "@/views/Chat/components/VideoAttachmentThumbnail.vue";
 import RichMessageComposer from "@/views/Chat/components/RichMessageComposer.vue";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -2248,17 +2124,18 @@ const {
     assetPreviewTitle,
     activeGroupInvitation,
     getAssetMessagePayload,
+    getAssetPreview,
+    getAssetPreviewSourceUrl,
+    getAssetPreviewStreamUrl,
+    getAssetSubtitleTracks,
     getAssetDisplayName,
     isAssetMessage,
     canPreviewImage,
     canPreviewVideo,
     getVideoPosterUrl,
-    getAssetPreviewBoxStyle,
-    getAssetPreviewImageUrl,
     getAssetUploadProgress,
     isAssetUploading,
     showVideoPlayOverlay,
-    formatAssetFileSize,
     getGroupInvitationPayload,
     isChatRecordMessage,
     hasMessageBubbleAction,
@@ -3065,164 +2942,10 @@ onBeforeUnmount(() => {
 .attachment-bubble {
     display: flex;
     flex-direction: column;
-    gap: 10px;
     width: min(360px, 100%);
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
-}
-
-.attachment-bubble--media {
-    gap: 0;
-}
-
-.attachment-bubble__media-shell {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 140px;
-    min-height: 96px;
-    max-width: min(var(--attachment-preview-width, 320px), 80vw);
-    max-height: var(--attachment-preview-height, 220px);
-    margin: 0 auto;
-    background: #f3f4f6;
-    overflow: hidden;
-    border-radius: 14px;
-}
-
-.attachment-bubble__preview {
-    display: block;
-    width: auto;
-    height: auto;
-    max-width: min(var(--attachment-preview-width, 320px), 80vw);
-    max-height: var(--attachment-preview-height, 220px);
-    object-fit: contain;
-    border-radius: 14px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
-    background: #f3f4f6;
-}
-
-.attachment-bubble__preview--video {
-    background: #111827;
-}
-
-.attachment-bubble__overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 14px;
-    background: rgba(15, 23, 42, 0.28);
-}
-
-.attachment-bubble__progress-ring,
-.attachment-bubble__play-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 50px;
-    height: 50px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    color: #111827;
-    font-size: 18px;
-    font-weight: 700;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
-}
-
-.attachment-bubble__play-button {
-    border: 0;
-    cursor: pointer;
-}
-
-.attachment-bubble__play-button :deep(svg) {
-    font-size: 28px;
-    transform: translateX(2px);
-}
-
-.attachment-bubble__body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: #eef1f4;
-    color: #2f3945;
-    box-shadow: inset 0 0 0 1px rgba(47, 57, 69, 0.08);
-    box-sizing: border-box;
-}
-
-.attachment-bubble__name {
-    font-weight: 600;
-    line-height: 1.5;
-    word-break: break-word;
-}
-
-.attachment-bubble__size {
-    font-size: 12px;
-    color: rgba(47, 57, 69, 0.62);
-}
-
-.attachment-file-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    min-width: 0;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: #eef1f4;
-    color: #2f3945;
-    box-shadow: inset 0 0 0 1px rgba(47, 57, 69, 0.08);
-    box-sizing: border-box;
-}
-
-.attachment-file-card__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    background: rgba(47, 57, 69, 0.1);
-    font-size: 20px;
-}
-
-.attachment-file-card__body {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
-}
-
-.attachment-file-card__name {
-    font-weight: 600;
-    line-height: 1.5;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.attachment-file-card__size {
-    font-size: 12px;
-    color: rgba(47, 57, 69, 0.62);
-}
-
-.attachment-bubble__link {
-    width: fit-content;
-    font-size: 12px;
-    color: inherit;
-    opacity: 0.82;
-    text-decoration: underline;
-}
-
-.attachment-bubble__link:hover {
-    opacity: 1;
 }
 
 .message-bubble.self {

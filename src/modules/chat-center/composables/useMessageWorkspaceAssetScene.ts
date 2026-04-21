@@ -15,7 +15,6 @@ import type {
 } from "@/types/chat";
 import { buildAssetPreviewFromChatMessageAssetPayload } from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
-import { formatFileSize } from "@/utils/fileFormatter";
 import { trimText } from "@/validators/common";
 
 type UseMessageWorkspaceAssetSceneOptions = {
@@ -91,11 +90,25 @@ export function useMessageWorkspaceAssetScene(
     const isAssetMessage = (messageItem: ChatMessageItem) =>
         Boolean(getAssetMessagePayload(messageItem));
 
-    const canPreviewImage = (messageItem: ChatMessageItem) =>
-        Boolean(
-            getAssetPreview(messageItem)?.mediaType === "image"
-            && getAssetPreview(messageItem)?.url,
+    const getAssetPreviewSourceUrl = (messageItem: ChatMessageItem) =>
+        getAssetPreview(messageItem)?.url || "";
+
+    const getAssetPreviewStreamUrl = (messageItem: ChatMessageItem) =>
+        getAssetPreview(messageItem)?.streamUrl || "";
+
+    const getAssetSubtitleTracks = (messageItem: ChatMessageItem) => {
+        const payload = getAssetMessagePayload(messageItem);
+        return (
+            payload?.subtitle_tracks
+            || payload?.extra_metadata?.video_processing?.subtitle_tracks
+            || []
         );
+    };
+
+    const canPreviewImage = (messageItem: ChatMessageItem) => {
+        const preview = getAssetPreview(messageItem);
+        return Boolean(preview?.mediaType === "image" && preview.url);
+    };
 
     const canPreviewVideo = (messageItem: ChatMessageItem) => {
         const preview = getAssetPreview(messageItem);
@@ -106,7 +119,7 @@ export function useMessageWorkspaceAssetScene(
             .trim()
             .toLowerCase();
         return (
-            Boolean(preview?.url || preview?.streamUrl)
+            Boolean(getAssetPreviewSourceUrl(messageItem) || getAssetPreviewStreamUrl(messageItem))
             && (mediaType === "video" || mimeType.startsWith("video/"))
         );
     };
@@ -114,28 +127,6 @@ export function useMessageWorkspaceAssetScene(
     const getVideoPosterUrl = (messageItem: ChatMessageItem) => {
         return getAssetPreview(messageItem)?.thumbnailUrl || "";
     };
-
-    const getAssetPreviewDimensions = (messageItem: ChatMessageItem) => {
-        const preview = getAssetPreview(messageItem);
-        const width = preview?.width || null;
-        const height = preview?.height || null;
-        return { width, height };
-    };
-
-    const getAssetPreviewBoxStyle = (messageItem: ChatMessageItem) => {
-        const { width, height } = getAssetPreviewDimensions(messageItem);
-        if (!width || !height) {
-            return undefined;
-        }
-        const scale = Math.min(320 / width, 220 / height, 1);
-        return {
-            "--attachment-preview-width": `${Math.round(width * scale)}px`,
-            "--attachment-preview-height": `${Math.round(height * scale)}px`,
-        };
-    };
-
-    const getAssetPreviewImageUrl = (messageItem: ChatMessageItem) =>
-        getAssetPreview(messageItem)?.url || "";
 
     const getAssetUploadProgress = (messageItem: ChatMessageItem) => {
         const progress = Number(
@@ -155,11 +146,6 @@ export function useMessageWorkspaceAssetScene(
     const showVideoPlayOverlay = (messageItem: ChatMessageItem) =>
         canPreviewVideo(messageItem) && !isAssetUploading(messageItem);
 
-    const formatAssetFileSize = (messageItem: ChatMessageItem) => {
-        const fileSize = Number(getAssetPreview(messageItem)?.fileSize || 0);
-        return fileSize > 0 ? formatFileSize(fileSize) : "大小未知";
-    };
-
     const getGroupInvitationPayload = (messageItem: ChatMessageItem) => {
         const payload = messageItem.payload as {
             group_invitation?: ChatGroupInvitationPayload;
@@ -176,15 +162,18 @@ export function useMessageWorkspaceAssetScene(
     const assetPreviewTitle = computed(() =>
         previewingAssetMessage.value
             ? getAssetPreview(previewingAssetMessage.value)?.displayName
-                || getAssetDisplayName(previewingAssetMessage.value)
+            || getAssetDisplayName(previewingAssetMessage.value)
             : "媒体预览",
     );
 
     const hasAssetUrl = (messageItem: ChatMessageItem) =>
-        Boolean(getAssetPreview(messageItem)?.url);
+        Boolean(getAssetPreviewSourceUrl(messageItem));
 
     const hasAssetPlaybackSource = (messageItem: ChatMessageItem) =>
-        Boolean(getAssetPreview(messageItem)?.streamUrl || getAssetPreview(messageItem)?.url);
+        Boolean(
+            getAssetPreviewStreamUrl(messageItem)
+            || getAssetPreviewSourceUrl(messageItem),
+        );
 
     const hasMessageBubbleAction = (messageItem: ChatMessageItem) =>
         Boolean(
@@ -216,7 +205,9 @@ export function useMessageWorkspaceAssetScene(
 
     const triggerAssetDownload = (messageItem: ChatMessageItem) => {
         const preview = getAssetPreview(messageItem);
-        const url = preview?.url || "";
+        const url =
+            getAssetPreviewSourceUrl(messageItem)
+            || getAssetPreviewStreamUrl(messageItem);
         if (!url) {
             return;
         }
@@ -434,17 +425,18 @@ export function useMessageWorkspaceAssetScene(
         assetPreviewTitle,
         activeGroupInvitation,
         getAssetMessagePayload,
+        getAssetPreview,
+        getAssetPreviewSourceUrl,
+        getAssetPreviewStreamUrl,
+        getAssetSubtitleTracks,
         getAssetDisplayName,
         isAssetMessage,
         canPreviewImage,
         canPreviewVideo,
         getVideoPosterUrl,
-        getAssetPreviewBoxStyle,
-        getAssetPreviewImageUrl,
         getAssetUploadProgress,
         isAssetUploading,
         showVideoPlayOverlay,
-        formatAssetFileSize,
         getGroupInvitationPayload,
         isChatRecordMessage,
         hasMessageBubbleAction,

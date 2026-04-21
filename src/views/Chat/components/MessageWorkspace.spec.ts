@@ -6,7 +6,7 @@ import {
     nextTick,
     ref,
 } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routeState = ref({ name: "ChatMessages" });
 const stealthAuditEnabled = ref(false);
@@ -396,20 +396,24 @@ vi.mock("@/modules/chat-center/composables/useMessageWorkspaceAssetScene", () =>
         assetPreviewTitle: computed(() => "媒体预览"),
         activeGroupInvitation: computed(() => null),
         getAssetMessagePayload: () => null,
+        getAssetPreview: () => null,
+        getAssetPreviewSourceUrl: () => "",
+        getAssetPreviewStreamUrl: () => "",
+        getAssetSubtitleTracks: () => [],
         getAssetDisplayName: () => "附件",
         isAssetMessage: () => false,
         canPreviewImage: () => false,
         canPreviewVideo: () => false,
         getVideoPosterUrl: () => "",
-        getAssetPreviewBoxStyle: () => undefined,
-        getAssetPreviewImageUrl: () => "",
         getAssetUploadProgress: () => 0,
         isAssetUploading: () => false,
         showVideoPlayOverlay: () => false,
-        formatAssetFileSize: () => "大小未知",
         getGroupInvitationPayload: () => null,
         isChatRecordMessage: () => false,
         hasMessageBubbleAction: () => false,
+        openPreviewableAsset: vi.fn(),
+        openAssetMessage: vi.fn(),
+        openGroupInvitationModal: vi.fn(),
         handleMessageBubbleClick: assetHandleMessageBubbleClick,
         triggerAssetDownload: assetTriggerDownload,
         toggleSaveAssetFolderInline: vi.fn(),
@@ -484,9 +488,14 @@ const ConditionalOpenStub = defineComponent({
 const messageWorkspaceComponentPromise = import(
     "@/views/Chat/components/MessageWorkspace.vue"
 );
+let messageWorkspaceComponent: Awaited<typeof messageWorkspaceComponentPromise> | null = null;
+
+beforeAll(async () => {
+    messageWorkspaceComponent = await messageWorkspaceComponentPromise;
+}, 120000);
 
 async function mountWorkspace() {
-    const component = await messageWorkspaceComponentPromise;
+    const component = messageWorkspaceComponent || await messageWorkspaceComponentPromise;
     const wrapper = shallowMount(component.default, {
         global: {
             stubs: {
@@ -534,15 +543,22 @@ describe("MessageWorkspace scene boundaries", () => {
     it("delegates message bubble context menu to the message-menu scene", async () => {
         const wrapper = await mountWorkspace();
 
-        await wrapper.find(".message-bubble").trigger("contextmenu", {
-            clientX: 40,
-            clientY: 50,
-        });
+        wrapper
+            .get(".message-bubble")
+            .element.dispatchEvent(
+                new MouseEvent("contextmenu", {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: 40,
+                    clientY: 50,
+                }),
+            );
+        await nextTick();
 
         expect(menuOpenMessageMenu).toHaveBeenCalledTimes(1);
         const menuCall = menuOpenMessageMenu.mock.calls[0];
         expect(menuCall?.[1]).toMatchObject({ id: 101 });
-    }, 60000);
+    }, 30000);
 
     it("delegates message bubble click to the asset scene", async () => {
         const wrapper = await mountWorkspace();

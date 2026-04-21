@@ -197,11 +197,7 @@
                             <span>{{ record.owner_name || "-" }}</span>
                         </template>
                         <template v-else-if="column.key === 'size'">
-                            <span>{{
-                                record.is_dir
-                                    ? "-"
-                                    : formatFileSize(record.file_size)
-                            }}</span>
+                            <span>{{ formatEntryPreviewSize(record) }}</span>
                         </template>
                         <template v-else-if="column.key === 'type'">
                             <a-tag :color="getEntryTypeMeta(record).color">
@@ -231,8 +227,8 @@
                                     >编辑</a
                                 >
                                 <a
-                                    v-if="!record.is_dir && record.url"
-                                    :href="record.url"
+                                    v-if="!record.is_dir && getEntryPreviewUrl(record)"
+                                    :href="getEntryPreviewUrl(record)"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     >查看</a
@@ -315,9 +311,12 @@ import { createFileManageRealtimeRuntime } from "@/views/FileManage/resourceReal
 import { useFileStore } from "@/stores/file";
 import { useUserStore } from "@/stores/user";
 import { subscribeAppRefresh } from "@/utils/appRefresh";
-import { buildAssetPreviewFromFileEntry } from "@/utils/assetPreview";
+import {
+    buildAssetPreviewFromFileEntry,
+    formatAssetPreviewFileSize,
+    getAssetPreviewPrimaryUrl,
+} from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
-import { formatFileSize } from "@/utils/fileFormatter";
 import { formatDateTime } from "@/utils/timeFormatter";
 import { trimText } from "@/validators/common";
 import { searchFileEntriesApi } from "@/api/upload";
@@ -533,6 +532,12 @@ const tableData = computed<Array<FileEntryItem | SearchFileEntryItem>>(() =>
 
 const buildEntryPreview = (item: FileEntryItem | SearchFileEntryItem) =>
     buildAssetPreviewFromFileEntry(item);
+
+const formatEntryPreviewSize = (item: FileEntryItem | SearchFileEntryItem) =>
+    formatAssetPreviewFileSize(buildEntryPreview(item));
+
+const getEntryPreviewUrl = (item: FileEntryItem | SearchFileEntryItem) =>
+    getAssetPreviewPrimaryUrl(buildEntryPreview(item));
 
 const isRecycleBinView = computed(
     () =>

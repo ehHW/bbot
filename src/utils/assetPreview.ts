@@ -1,6 +1,11 @@
 import type { FileEntryItem, SearchFileEntryItem } from '@/api/upload'
 import type { AssetPreviewModel } from '@/types/assets'
-import type { ChatComposerAttachmentToken, ChatMessageAssetPayload } from '@/types/chat'
+import type {
+    ChatComposerAttachmentToken,
+    ChatMessageAssetPayload,
+    ChatMessageRecordItem,
+} from '@/types/chat'
+import { formatFileSize } from '@/utils/fileFormatter'
 
 type ResourceEntryLike = FileEntryItem | SearchFileEntryItem
 
@@ -94,6 +99,34 @@ export function normalizeAssetPreviewModel(input: AssetPreviewInput): AssetPrevi
     }
 }
 
+export function getAssetPreviewPrimaryUrl(
+    preview?: AssetPreviewModel | null,
+) {
+    return normalizeText(preview?.url) || normalizeText(preview?.streamUrl) || ''
+}
+
+export function formatAssetPreviewFileSize(
+    preview?: AssetPreviewModel | null,
+    options?: {
+        directoryLabel?: string
+        unknownLabel?: string
+    },
+) {
+    const directoryLabel = options?.directoryLabel || '-'
+    const unknownLabel = options?.unknownLabel || '大小未知'
+
+    if (!preview) {
+        return unknownLabel
+    }
+
+    if (preview.isDirectory) {
+        return directoryLabel
+    }
+
+    const fileSize = Number(preview.fileSize || 0)
+    return fileSize > 0 ? formatFileSize(fileSize) : unknownLabel
+}
+
 function getResourceEntryAsset(item: ResourceEntryLike) {
     return item.asset || item.asset_reference?.asset || null
 }
@@ -168,5 +201,15 @@ export function buildAssetPreviewFromChatComposerAttachmentToken(
         processingStatus: token.processing_status,
         isDirectory: false,
         isVirtual: false,
+    })
+}
+
+export function buildAssetPreviewFromChatRecordEntry(
+    entry: Pick<ChatMessageRecordItem, 'asset' | 'content' | 'message_type'>,
+): AssetPreviewModel {
+    return buildAssetPreviewFromChatMessageAssetPayload(entry.asset || {}, {
+        fallbackDisplayName:
+            entry.content || (entry.message_type === 'image' ? '图片' : '附件'),
+        fallbackMediaType: entry.message_type,
     })
 }

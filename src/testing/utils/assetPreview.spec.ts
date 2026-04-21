@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildAssetPreviewFromChatMessageAssetPayload, buildAssetPreviewFromFileEntry } from '@/utils/assetPreview'
+import {
+    buildAssetPreviewFromChatMessageAssetPayload,
+    buildAssetPreviewFromChatRecordEntry,
+    buildAssetPreviewFromFileEntry,
+    formatAssetPreviewFileSize,
+    getAssetPreviewPrimaryUrl,
+} from '@/utils/assetPreview'
 
 describe('assetPreview', () => {
     it('normalizes resource-center file entries into a minimal preview model', () => {
@@ -96,5 +102,93 @@ describe('assetPreview', () => {
             isDirectory: false,
             isVirtual: false,
         })
+    })
+
+    it('reuses the same preview model for chat record asset entries', () => {
+        const preview = buildAssetPreviewFromChatRecordEntry({
+            message_type: 'file',
+            content: '会议录像',
+            asset: {
+                asset_reference_id: 91,
+                display_name: '会议录像.mp4',
+                media_type: 'video',
+                mime_type: 'video/mp4',
+                file_size: 16384,
+                url: '/uploads/users/demo/meeting.mp4',
+                extra_metadata: {
+                    video_processing: {
+                        playlist_url: '/media/demo/meeting.m3u8',
+                        thumbnail_url: '/media/demo/meeting.jpg',
+                        status: 'ready',
+                    },
+                },
+            },
+        })
+
+        expect(preview).toEqual({
+            displayName: '会议录像.mp4',
+            mediaType: 'video',
+            mimeType: 'video/mp4',
+            fileSize: 16384,
+            url: '/uploads/users/demo/meeting.mp4',
+            streamUrl: '/media/demo/meeting.m3u8',
+            thumbnailUrl: '/media/demo/meeting.jpg',
+            processingStatus: 'ready',
+            width: undefined,
+            height: undefined,
+            durationSeconds: undefined,
+            isDirectory: false,
+            isVirtual: false,
+        })
+    })
+
+    it('formats shared size and primary url from preview contract', () => {
+        expect(formatAssetPreviewFileSize({
+            displayName: '图片',
+            mediaType: 'image',
+            mimeType: 'image/png',
+            fileSize: 4096,
+            url: '/uploads/demo.png',
+            streamUrl: undefined,
+            thumbnailUrl: undefined,
+            processingStatus: undefined,
+            width: 1200,
+            height: 800,
+            durationSeconds: undefined,
+            isDirectory: false,
+            isVirtual: false,
+        })).toBe('4.00 KB')
+
+        expect(formatAssetPreviewFileSize({
+            displayName: '目录',
+            mediaType: 'directory',
+            mimeType: undefined,
+            fileSize: undefined,
+            url: undefined,
+            streamUrl: undefined,
+            thumbnailUrl: undefined,
+            processingStatus: undefined,
+            width: undefined,
+            height: undefined,
+            durationSeconds: undefined,
+            isDirectory: true,
+            isVirtual: false,
+        })).toBe('-')
+
+        expect(getAssetPreviewPrimaryUrl({
+            displayName: '视频',
+            mediaType: 'video',
+            mimeType: 'video/mp4',
+            fileSize: 8192,
+            url: undefined,
+            streamUrl: '/media/demo.m3u8',
+            thumbnailUrl: '/media/demo.jpg',
+            processingStatus: 'ready',
+            width: 1920,
+            height: 1080,
+            durationSeconds: 35,
+            isDirectory: false,
+            isVirtual: false,
+        })).toBe('/media/demo.m3u8')
     })
 })

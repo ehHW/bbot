@@ -1,6 +1,11 @@
 <template>
     <span class="file-name-cell">
-        <img v-if="previewImageUrl" :src="previewImageUrl" :alt="name" class="file-preview-md" />
+        <img
+            v-if="previewImageUrl"
+            :src="previewImageUrl"
+            :alt="name"
+            class="file-preview-md"
+        />
         <img v-else :src="iconUrl" :alt="name" class="file-icon-md" />
         <a v-if="clickable" @click="onClick">{{ name }}</a>
         <span v-else>{{ name }}</span>
@@ -8,52 +13,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { AssetPreviewModel } from '@/types/assets'
-import { getIconUrl } from '@/utils/iconMapper'
+import { computed } from "vue";
+import type { AssetPreviewModel } from "@/types/assets";
+import { getIconUrl } from "@/utils/iconMapper";
 
 const props = withDefaults(
     defineProps<{
-        name: string
-        isDir: boolean
-        clickable?: boolean
-        preview?: AssetPreviewModel | null
+        name: string;
+        isDir: boolean;
+        clickable?: boolean;
+        preview?: AssetPreviewModel | null;
     }>(),
     {
         clickable: false,
         preview: null,
     },
-)
+);
 
 const emit = defineEmits<{
-    (e: 'click'): void
-}>()
+    (e: "click"): void;
+}>();
 
-const resolvedIsDir = computed(() => props.isDir || Boolean(props.preview?.isDirectory))
+const resolvedIsDir = computed(
+    () => props.isDir || Boolean(props.preview?.isDirectory),
+);
 
-const iconUrl = computed(() => getIconUrl(props.name, resolvedIsDir.value))
+const iconUrl = computed(() => getIconUrl(props.name, resolvedIsDir.value));
 
 const previewImageUrl = computed(() => {
     if (resolvedIsDir.value || !props.preview) {
-        return ''
+        return "";
     }
 
-    const mediaType = String(props.preview.mediaType || '').trim().toLowerCase()
-    if (mediaType === 'image' && props.preview.url) {
-        return props.preview.url
+    const mediaType = String(props.preview.mediaType || "")
+        .trim()
+        .toLowerCase();
+    if (mediaType === "image" && props.preview.url) {
+        return props.preview.url;
     }
-    if (mediaType === 'video' && props.preview.thumbnailUrl) {
-        return props.preview.thumbnailUrl
+    if (mediaType === "video" && props.preview.thumbnailUrl) {
+        return props.preview.thumbnailUrl;
     }
-    return ''
-})
+    return "";
+});
 
 const onClick = () => {
     if (!props.clickable) {
-        return
+        return;
     }
-    emit('click')
-}
+    emit("click");
+};
 </script>
 
 <style scoped>
