@@ -183,6 +183,7 @@
                             <FileNameCell
                                 :name="record.display_name"
                                 :is-dir="record.is_dir"
+                                :preview="buildEntryPreview(record)"
                                 :clickable="record.is_dir"
                                 @click="enterFolder(record)"
                             />
@@ -314,6 +315,7 @@ import { createFileManageRealtimeRuntime } from "@/views/FileManage/resourceReal
 import { useFileStore } from "@/stores/file";
 import { useUserStore } from "@/stores/user";
 import { subscribeAppRefresh } from "@/utils/appRefresh";
+import { buildAssetPreviewFromFileEntry } from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
 import { formatFileSize } from "@/utils/fileFormatter";
 import { formatDateTime } from "@/utils/timeFormatter";
@@ -345,15 +347,9 @@ type ResourceSelectionSession = {
     kind: ResourceSelectionSessionKind;
 };
 
-type UploadTargetFolderSelection = {
-    entryId: number;
-    displayName: string;
-    relativePath: string;
-};
-
 const resourceSelectionSession = ref<ResourceSelectionSession | null>(null);
 const resourceSelectionResult = ref<AssetPickerSelection | null>(null);
-const uploadTargetFolder = ref<UploadTargetFolderSelection | null>(null);
+const uploadTargetFolder = ref<AssetPickerSelection | null>(null);
 
 const searchKeyword = ref("");
 const suggestResults = ref<SearchFileEntryItem[]>([]);
@@ -534,6 +530,10 @@ const columns = computed(() => {
 const tableData = computed<Array<FileEntryItem | SearchFileEntryItem>>(() =>
     isSearchMode.value ? searchResults.value : fileStore.entries,
 );
+
+const buildEntryPreview = (item: FileEntryItem | SearchFileEntryItem) =>
+    buildAssetPreviewFromFileEntry(item);
+
 const isRecycleBinView = computed(
     () =>
         !isSearchMode.value && Boolean(fileStore.currentParent?.is_recycle_bin),
@@ -932,22 +932,22 @@ const clearUploadTargetFolder = () => {
 const handleResourceSelectionPick = (
     item: FileEntryItem | SearchFileEntryItem,
 ) => {
-    if (resourceSelectionSession.value?.kind === "upload-target") {
-        if (!item.is_dir) {
-            return;
-        }
-        uploadTargetFolder.value = {
-            entryId: item.id,
-            displayName: item.display_name,
-            relativePath: item.relative_path,
-        };
-        resourceSelectionSession.value = null;
-        message.success(`上传目录已切换为：${item.display_name}`);
+    const selection = resourceSelectionPickItem(item);
+    if (!selection) {
         return;
     }
 
-    const selection = resourceSelectionPickItem(item);
-    if (!selection) {
+    if (resourceSelectionSession.value?.kind === "upload-target") {
+        if (selection.kind !== "folder") {
+            return;
+        }
+        uploadTargetFolder.value = selection;
+        resourceSelectionSession.value = null;
+        message.success(`上传目录已切换为：${selection.displayName}`);
+        return;
+    }
+
+    if (selection.kind !== "file") {
         return;
     }
     resourceSelectionResult.value = selection;

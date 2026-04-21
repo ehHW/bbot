@@ -205,6 +205,34 @@ describe('useAssetPickerScene', () => {
             remaining_days: null,
             recycle_original_parent_id: null,
         })).toBe(false)
+
+        const selection = scene.pickItem({
+            id: 41,
+            display_name: '普通目录',
+            stored_name: '普通目录',
+            is_dir: true,
+            is_virtual: false,
+            parent_id: null,
+            file_size: 0,
+            file_md5: '',
+            relative_path: 'normal-folder',
+            url: '',
+            created_at: '',
+            updated_at: '',
+            is_system: false,
+            is_recycle_bin: false,
+            recycled_at: null,
+            expires_at: null,
+            remaining_days: null,
+            recycle_original_parent_id: null,
+        })
+
+        expect(selection).toMatchObject({
+            kind: 'folder',
+            entryId: 41,
+            displayName: '普通目录',
+            relativePath: 'normal-folder',
+        })
     })
 
     it('filters selectable files by allowed media kinds', () => {

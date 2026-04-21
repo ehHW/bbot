@@ -6,9 +6,11 @@ import type {
     ChatMessageItem,
     ChatMessageRecordPayload,
 } from "@/types/chat";
+import {
+    buildChatComposerAssetClipboardDataFromMessageAssetPayload,
+    prepareChatComposerAssetFromMessageAssetPayload,
+} from "@/modules/chat-center/utils/chatAssetPrepare";
 import { getErrorMessage } from "@/utils/error";
-import { formatFileSize } from "@/utils/fileFormatter";
-import { buildComposerAttachmentToken } from "@/modules/chat-center/composables/useMessageWorkspaceComposerScene";
 import type { RichMessageComposerExpose } from "@/views/Chat/components/RichMessageComposer.vue";
 
 const MESSAGE_MENU_WIDTH = 156;
@@ -175,15 +177,16 @@ export function useMessageWorkspaceMessageMenuScene(
         }
     };
 
-    const buildAttachmentClipboardHtml = (messageItem: ChatMessageItem) => {
+    const buildAttachmentClipboardData = (messageItem: ChatMessageItem) => {
         const payload = options.getAssetMessagePayload(messageItem);
         if (!payload) {
-            return "";
+            return null;
         }
-        const fileSizeText = payload.file_size
-            ? formatFileSize(payload.file_size)
-            : "大小未知";
-        return `<span class="composer-attachment-chip" contenteditable="false" data-solbot-attachment="1" data-token-id="copied_${messageItem.id}" data-source-asset-reference-id="${payload.source_asset_reference_id || payload.asset_reference_id}" data-display-name="${escapeHtml(options.getAssetDisplayName(messageItem))}" data-media-type="${escapeHtml(payload.media_type || messageItem.message_type)}" data-mime-type="${escapeHtml(payload.mime_type || "")}" data-file-size="${payload.file_size || ""}" data-url="${escapeHtml(payload.url || "")}"><span class="composer-attachment-chip__icon">F</span><span class="composer-attachment-chip__body"><span class="composer-attachment-chip__name">${escapeHtml(options.getAssetDisplayName(messageItem))}</span><span class="composer-attachment-chip__size">${escapeHtml(fileSizeText)}</span></span></span>`;
+        return buildChatComposerAssetClipboardDataFromMessageAssetPayload(payload, {
+            tokenId: `copied_${messageItem.id}`,
+            fallbackDisplayName: options.getAssetDisplayName(messageItem),
+            fallbackMediaType: messageItem.message_type,
+        });
     };
 
     const handleCopyMessage = async () => {
@@ -203,17 +206,18 @@ export function useMessageWorkspaceMessageMenuScene(
                 && "ClipboardItem" in window
                 && navigator.clipboard.write
             ) {
-                const html = buildAttachmentClipboardHtml(messageMenuMessage.value);
-                const text = [
-                    options.getAssetDisplayName(messageMenuMessage.value),
-                    options.getAssetMessagePayload(messageMenuMessage.value)?.url || "",
-                ]
-                    .filter(Boolean)
-                    .join("\n");
+                const clipboardData = buildAttachmentClipboardData(messageMenuMessage.value);
+                const text =
+                    clipboardData?.text || [
+                        options.getAssetDisplayName(messageMenuMessage.value),
+                        options.getAssetMessagePayload(messageMenuMessage.value)?.url || "",
+                    ]
+                        .filter(Boolean)
+                        .join("\n");
                 await navigator.clipboard.write([
                     new ClipboardItem({
                         "text/plain": new Blob([text], { type: "text/plain" }),
-                        "text/html": new Blob([html], { type: "text/html" }),
+                        "text/html": new Blob([clipboardData?.html || ""], { type: "text/html" }),
                     }),
                 ]);
                 message.success("消息已复制");
@@ -378,31 +382,23 @@ export function useMessageWorkspaceMessageMenuScene(
             const draftPayload = (draft.payload || {}) as Partial<ChatMessageAssetPayload>;
             if (draft.message_type === "text" && draft.content) {
                 options.composerRef.value?.insertText(draft.content);
-            } else if (
-                (draft.message_type === "image" || draft.message_type === "file")
-                && Number(
-                    draftPayload.source_asset_reference_id
-                    || draftPayload.asset_reference_id
-                    || 0,
-                )
-            ) {
+            } else if (draft.message_type === "image" || draft.message_type === "file") {
+                const preparedAsset =
+                    prepareChatComposerAssetFromMessageAssetPayload(
+                        draftPayload,
+                        {
+                            tokenId: `restored_${messageItem.id}`,
+                            fallbackDisplayName:
+                                messageItem.content || "附件",
+                            fallbackMediaType:
+                                draft.message_type || "file",
+                        },
+                    );
+                if (!preparedAsset) {
+                    throw new Error("当前撤回内容缺少可恢复的附件引用");
+                }
                 options.composerRef.value?.insertAttachment(
-                    buildComposerAttachmentToken({
-                        sourceAssetReferenceId: Number(
-                            draftPayload.source_asset_reference_id
-                            || draftPayload.asset_reference_id
-                            || 0,
-                        ),
-                        displayName: String(
-                            draftPayload.display_name || messageItem.content || "附件",
-                        ),
-                        mediaType: String(
-                            draftPayload.media_type || draft.message_type || "file",
-                        ),
-                        mimeType: String(draftPayload.mime_type || ""),
-                        fileSize: Number(draftPayload.file_size || 0) || undefined,
-                        url: String(draftPayload.url || ""),
-                    }),
+                    preparedAsset.attachmentToken,
                 );
             }
             options.composerRef.value?.focus();
@@ -439,12 +435,4 @@ export function useMessageWorkspaceMessageMenuScene(
         handleDeleteMessage,
         handleRestoreRevokedMessage,
     };
-}
-
-function escapeHtml(value: string) {
-    return String(value || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAssetPickerSelection } from '@/components/assets/assetPickerAdapter'
+import { buildAssetPickerSelection, buildUploadAssetPickerSelection } from '@/components/assets/assetPickerAdapter'
 
 describe('assetPickerAdapter', () => {
     it('normalizes a regular resource entry into a picker selection', () => {
@@ -43,16 +43,27 @@ describe('assetPickerAdapter', () => {
         })
 
         expect(selection).toMatchObject({
+            kind: 'file',
             entryId: 7,
             assetReferenceId: 31,
             displayName: '季度复盘.pdf',
             mediaType: 'file',
             mimeType: 'application/pdf',
             fileSize: 4096,
+            relativePath: 'users/demo/季度复盘.pdf',
             url: '/uploads/users/demo/季度复盘.pdf',
-            streamUrl: '',
-            thumbnailUrl: '',
-            processingStatus: '',
+            streamUrl: undefined,
+            thumbnailUrl: undefined,
+            processingStatus: undefined,
+            preview: {
+                displayName: '季度复盘.pdf',
+                mediaType: 'file',
+                mimeType: 'application/pdf',
+                fileSize: 4096,
+                url: '/uploads/users/demo/季度复盘.pdf',
+                isDirectory: false,
+                isVirtual: false,
+            },
         })
     })
 
@@ -103,12 +114,134 @@ describe('assetPickerAdapter', () => {
         })
 
         expect(selection).toMatchObject({
+            kind: 'file',
             entryId: 8,
             assetReferenceId: 32,
             mediaType: 'video',
             streamUrl: '/media/demo/release.m3u8',
             thumbnailUrl: '/media/demo/release.jpg',
             processingStatus: 'ready',
+            preview: {
+                mediaType: 'video',
+                streamUrl: '/media/demo/release.m3u8',
+                thumbnailUrl: '/media/demo/release.jpg',
+                processingStatus: 'ready',
+            },
+        })
+    })
+
+    it('normalizes directories into the same picker selection contract', () => {
+        const selection = buildAssetPickerSelection({
+            id: 21,
+            display_name: '设计资料',
+            stored_name: '设计资料',
+            is_dir: true,
+            parent_id: null,
+            file_size: 0,
+            file_md5: '',
+            relative_path: '设计资料',
+            url: '',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+            is_system: false,
+            is_recycle_bin: false,
+            recycled_at: null,
+            expires_at: null,
+            remaining_days: null,
+            recycle_original_parent_id: null,
+        })
+
+        expect(selection).toMatchObject({
+            kind: 'folder',
+            entryId: 21,
+            assetReferenceId: null,
+            displayName: '设计资料',
+            mediaType: 'directory',
+            relativePath: '设计资料',
+            isDirectory: true,
+            preview: {
+                displayName: '设计资料',
+                mediaType: 'directory',
+                isDirectory: true,
+                isVirtual: false,
+            },
+        })
+    })
+
+    it('normalizes upload results into the same file selection contract', () => {
+        const selection = buildUploadAssetPickerSelection(
+            {
+                relativePath: 'users/demo/架构图.png',
+                url: '/uploads/users/demo/架构图.png',
+                assetReferenceId: 52,
+                file: {
+                    id: 13,
+                    display_name: '架构图.png',
+                    stored_name: 'stored.png',
+                    is_dir: false,
+                    parent_id: null,
+                    file_size: 2048,
+                    file_md5: 'md5',
+                    relative_path: 'users/demo/架构图.png',
+                    url: '/uploads/users/demo/架构图.png',
+                    created_at: '2025-01-01T00:00:00Z',
+                    updated_at: '2025-01-01T00:00:00Z',
+                    is_system: false,
+                    is_recycle_bin: false,
+                    recycled_at: null,
+                    expires_at: null,
+                    remaining_days: null,
+                    recycle_original_parent_id: null,
+                    asset_reference_id: 52,
+                    asset_reference: null,
+                    asset: {
+                        id: 14,
+                        file_md5: 'md5',
+                        sha256: null,
+                        storage_backend: 'local',
+                        storage_key: 'users/demo/架构图.png',
+                        mime_type: 'image/png',
+                        media_type: 'image',
+                        file_size: 2048,
+                        original_name: '架构图.png',
+                        extension: '.png',
+                        width: null,
+                        height: null,
+                        duration_seconds: null,
+                        extra_metadata: {},
+                        url: '/uploads/users/demo/架构图.png',
+                    },
+                },
+            },
+            {
+                name: '架构图.png',
+                size: 2048,
+                type: 'image/png',
+            },
+        )
+
+        expect(selection).toMatchObject({
+            kind: 'file',
+            entryId: 13,
+            assetReferenceId: 52,
+            displayName: '架构图.png',
+            mediaType: 'image',
+            mimeType: 'image/png',
+            fileSize: 2048,
+            relativePath: 'users/demo/架构图.png',
+            url: '/uploads/users/demo/架构图.png',
+            streamUrl: undefined,
+            thumbnailUrl: undefined,
+            processingStatus: undefined,
+            preview: {
+                displayName: '架构图.png',
+                mediaType: 'image',
+                mimeType: 'image/png',
+                fileSize: 2048,
+                url: '/uploads/users/demo/架构图.png',
+                isDirectory: false,
+                isVirtual: false,
+            },
         })
     })
 

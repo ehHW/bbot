@@ -2,6 +2,8 @@ import { computed, markRaw, ref, toRaw, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi, restoreRecycleBinEntryApi } from '@/api/upload'
 import type { FileEntryItem, FileManageScope } from '@/api/upload'
+import type { AssetPreviewModel } from '@/types/assets'
+import { normalizeAssetPreviewModel } from '@/utils/assetPreview'
 import { uploadFileWithCategory } from '@/utils/fileUploader'
 import { useAuthStore } from '@/stores/auth'
 
@@ -29,6 +31,7 @@ export interface UploadTaskItem {
     relativePath: string
     displayName: string
     size: number
+    preview?: AssetPreviewModel
     status: UploadTaskStatus
     progress: number
     hashProgress: number
@@ -144,6 +147,18 @@ const pickDisplayName = (relativePath: string, fileName: string): string => {
     }
     return normalized[normalized.length - 1] || fileName
 }
+
+const buildUploadTaskPreview = (options: {
+    displayName: string
+    fileSize?: number
+    mimeType?: string
+}) => normalizeAssetPreviewModel({
+    displayName: options.displayName,
+    mimeType: options.mimeType,
+    fileSize: options.fileSize,
+    isDirectory: false,
+    isVirtual: false,
+})
 
 const calcOverallProgress = (task: Pick<UploadTaskItem, 'hashProgress' | 'chunkProgress' | 'mergeProgress'>) => {
     return Math.min(100, Math.max(0, Math.floor((task.hashProgress + task.chunkProgress + task.mergeProgress) / 3)))
@@ -307,6 +322,11 @@ export const useFileStore = defineStore('file', () => {
                 relativePath,
                 displayName: pickDisplayName(relativePath, file.name),
                 size: file.size,
+                preview: buildUploadTaskPreview({
+                    displayName: pickDisplayName(relativePath, file.name),
+                    fileSize: file.size,
+                    mimeType: file.type,
+                }),
                 status: 'pending',
                 progress: 0,
                 hashProgress: 0,
@@ -368,6 +388,9 @@ export const useFileStore = defineStore('file', () => {
             task.chunkProgress = 100
             task.mergeProgress = 100
             task.resultPath = result.relativePath
+            task.displayName = result.preview.displayName
+            task.size = result.preview.fileSize || task.size
+            task.preview = result.preview
             task.status = 'completed'
 
             if ((task.parentId ?? null) === (currentParentId.value ?? null)) {
@@ -510,6 +533,11 @@ export const useFileStore = defineStore('file', () => {
                 uploadTasks.value = tasks.map((task) => ({
                     ...task,
                     file: task.file instanceof File ? markRaw(task.file) : null,
+                    preview: task.preview || buildUploadTaskPreview({
+                        displayName: task.displayName,
+                        fileSize: task.size,
+                        mimeType: task.file instanceof File ? task.file.type : undefined,
+                    }),
                 }))
             }
         } catch {

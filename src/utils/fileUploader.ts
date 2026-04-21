@@ -1,5 +1,7 @@
 import { getUploadedChunksApi, mergeChunksApi, uploadChunkApi, uploadPrecheckApi, uploadSmallFileApi } from '@/api/upload'
 import type { FileEntryItem } from '@/api/upload'
+import { buildUploadAssetPickerSelection, type AssetPickerSelection } from '@/components/assets/assetPickerAdapter'
+import type { AssetPreviewModel } from '@/types/assets'
 import { calculateFileHashes } from '@/utils/fileHash'
 import { waitForUploadTaskRealtime } from '@/utils/uploadRealtimeRuntime'
 import { globalWebSocket } from '@/utils/websocket'
@@ -28,6 +30,21 @@ export interface UploadFileResult {
     url: string
     file?: FileEntryItem
     assetReferenceId?: number | null
+    selection: AssetPickerSelection
+    preview: AssetPreviewModel
+}
+
+function attachUploadSelection(
+    result: Omit<UploadFileResult, 'selection' | 'preview'>,
+    file: Pick<File, 'name' | 'size' | 'type'>,
+): UploadFileResult {
+    const selection = buildUploadAssetPickerSelection(result, file)
+
+    return {
+        ...result,
+        selection,
+        preview: selection.preview,
+    }
 }
 
 export const uploadFileWithCategory = async ({
@@ -71,13 +88,13 @@ export const uploadFileWithCategory = async ({
         onHashProgress?.(100)
         onChunkProgress?.(100)
         onMergeProgress?.(100)
-        return {
+        return attachUploadSelection({
             mode: data.mode === 'instant' ? 'instant' : 'direct',
             relativePath: data.file.relative_path,
             url: data.file.url,
             file: data.file,
             assetReferenceId: data.file.asset_reference_id ?? null,
-        }
+        }, file)
     }
 
     onLog?.('开始计算文件与分片 MD5')
@@ -100,13 +117,13 @@ export const uploadFileWithCategory = async ({
         onChunkProgress?.(100)
         onMergeProgress?.(100)
         onLog?.('命中秒传，跳过分片上传')
-        return {
+        return attachUploadSelection({
             mode: 'instant',
             relativePath: precheckRes.data.file?.relative_path || '',
             url: precheckRes.data.file?.url || '',
             file: precheckRes.data.file,
             assetReferenceId: precheckRes.data.file?.asset_reference_id ?? null,
-        }
+        }, file)
     }
 
     const uploadedRes = await getUploadedChunksApi(fileMd5, category)
@@ -157,5 +174,12 @@ export const uploadFileWithCategory = async ({
         relative_path: relativePath,
     })
 
-    return waitForUploadTaskRealtime({ taskId: mergeRes.data.task_id, token, onProgress: onMergeProgress, onLog })
+    const realtimeResult = await waitForUploadTaskRealtime({
+        taskId: mergeRes.data.task_id,
+        token,
+        onProgress: onMergeProgress,
+        onLog,
+    })
+
+    return attachUploadSelection(realtimeResult, file)
 }

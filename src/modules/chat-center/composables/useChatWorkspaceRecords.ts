@@ -1,7 +1,9 @@
 import { message } from 'ant-design-vue'
 import { ref } from 'vue'
+import {
+    buildChatComposerAssetClipboardDataFromRecordEntry,
+} from '@/modules/chat-center/utils/chatAssetPrepare'
 import type { ChatMessageItem, ChatMessageRecordItem, ChatMessageRecordPayload } from '@/types/chat'
-import { formatFileSize } from '@/utils/fileFormatter'
 import { trimText } from '@/validators/common'
 
 export type ChatRecordViewerState = {
@@ -62,34 +64,28 @@ export function useChatWorkspaceRecords(options: {
             return buildChatRecordPlainText(entry.chat_record || null)
         }
         if (entry.message_type === 'image') {
-            return [entry.asset?.display_name || '[图片]', entry.asset?.url || ''].filter(Boolean).join('\n')
+            return buildChatComposerAssetClipboardDataFromRecordEntry(entry, {
+                tokenId: `record_${entry.source_message_id || Date.now()}`,
+            })?.text || [entry.asset?.display_name || '[图片]', entry.asset?.url || ''].filter(Boolean).join('\n')
         }
         if (entry.message_type === 'file') {
-            return [entry.asset?.display_name || '[文件]', entry.asset?.url || ''].filter(Boolean).join('\n')
+            return buildChatComposerAssetClipboardDataFromRecordEntry(entry, {
+                tokenId: `record_${entry.source_message_id || Date.now()}`,
+            })?.text || [entry.asset?.display_name || '[文件]', entry.asset?.url || ''].filter(Boolean).join('\n')
         }
         return entry.content || '空消息'
     }
 
-    const buildChatRecordEntryClipboardHtml = (entry: ChatMessageRecordItem) => {
-        if ((entry.message_type !== 'image' && entry.message_type !== 'file') || !entry.asset) {
-            return ''
-        }
-        const sourceAssetReferenceId = Number(entry.asset.source_asset_reference_id || entry.asset.asset_reference_id || 0)
-        if (!sourceAssetReferenceId) {
-            return ''
-        }
-        const fileSizeText = entry.asset.file_size ? formatFileSize(entry.asset.file_size) : '大小未知'
-        return `<span class="composer-attachment-chip" contenteditable="false" data-solbot-attachment="1" data-token-id="record_${entry.source_message_id || Date.now()}" data-source-asset-reference-id="${sourceAssetReferenceId}" data-display-name="${escapeHtml(entry.asset.display_name || entry.content || '附件')}" data-media-type="${escapeHtml(entry.asset.media_type || entry.message_type)}" data-mime-type="${escapeHtml(entry.asset.mime_type || '')}" data-file-size="${entry.asset.file_size || ''}" data-url="${escapeHtml(entry.asset.url || '')}"><span class="composer-attachment-chip__icon">F</span><span class="composer-attachment-chip__body"><span class="composer-attachment-chip__name">${escapeHtml(entry.asset.display_name || entry.content || '附件')}</span><span class="composer-attachment-chip__size">${escapeHtml(fileSizeText)}</span></span></span>`
-    }
-
     const handleCopyChatRecordEntry = async (entry: ChatMessageRecordItem) => {
         try {
-            const clipboardHtml = buildChatRecordEntryClipboardHtml(entry)
-            if (clipboardHtml && 'ClipboardItem' in window && navigator.clipboard.write) {
+            const clipboardData = buildChatComposerAssetClipboardDataFromRecordEntry(entry, {
+                tokenId: `record_${entry.source_message_id || Date.now()}`,
+            })
+            if (clipboardData?.html && 'ClipboardItem' in window && navigator.clipboard.write) {
                 await navigator.clipboard.write([
                     new ClipboardItem({
                         'text/plain': new Blob([buildChatRecordEntryCopyText(entry)], { type: 'text/plain' }),
-                        'text/html': new Blob([clipboardHtml], { type: 'text/html' }),
+                        'text/html': new Blob([clipboardData.html], { type: 'text/html' }),
                     }),
                 ])
                 message.success('消息已复制')
@@ -125,12 +121,4 @@ export function useChatWorkspaceRecords(options: {
         handleForwardChatRecordEntry,
         clearChatRecordViewers,
     }
-}
-
-function escapeHtml(value: string) {
-    return String(value || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
 }

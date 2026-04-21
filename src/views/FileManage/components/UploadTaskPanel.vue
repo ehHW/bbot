@@ -108,7 +108,7 @@
         >
             <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'displayName'">
-                    <FileNameCell :name="record.displayName" :is-dir="false" />
+                    <FileNameCell :name="record.displayName" :is-dir="false" :preview="buildTaskPreview(record)" />
                 </template>
                 <template v-else-if="column.key === 'size'">
                     {{ formatFileSize(record.size) }}
@@ -269,6 +269,7 @@
                         <FileNameCell
                             :name="record.display_name"
                             :is-dir="true"
+                            :preview="buildFolderPreview(record)"
                             clickable
                             @click="enterFolder(record)"
                         />
@@ -283,20 +284,18 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { message } from "ant-design-vue";
 import FileNameCell from "@/components/common/FileNameCell.vue";
+import type { AssetPickerSelection } from "@/components/assets/assetPickerAdapter";
+import type { AssetPreviewModel } from "@/types/assets";
 import { useFileStore } from "@/stores/file";
+import type { UploadTaskItem } from "@/stores/file";
 import { useUserStore } from "@/stores/user";
 import type { FileEntryItem } from "@/api/upload";
+import { buildAssetPreviewFromFileEntry, normalizeAssetPreviewModel } from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
 import { formatFileSize } from "@/utils/fileFormatter";
 
-type UploadTargetFolderSelection = {
-    entryId: number;
-    displayName: string;
-    relativePath: string;
-};
-
 const props = defineProps<{
-    externalTargetFolder?: UploadTargetFolderSelection | null;
+    externalTargetFolder?: AssetPickerSelection | null;
 }>();
 
 const emit = defineEmits<{
@@ -336,6 +335,21 @@ const readonlyDescription = computed(
 const folderEntries = computed(() =>
     fileStore.entries.filter((item) => item.is_dir && !item.is_recycle_bin),
 );
+
+const buildFolderPreview = (item: FileEntryItem) => buildAssetPreviewFromFileEntry(item);
+
+const buildTaskPreview = (task: UploadTaskItem): AssetPreviewModel => {
+    if (task.preview) {
+        return task.preview;
+    }
+    return normalizeAssetPreviewModel({
+        displayName: task.displayName,
+        mimeType: task.file instanceof File ? task.file.type : undefined,
+        fileSize: task.size,
+        isDirectory: false,
+        isVirtual: false,
+    });
+};
 
 const columns = [
     { title: "文件名", dataIndex: "displayName", width: 260 },

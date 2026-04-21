@@ -387,11 +387,10 @@ export function useAssetPickerScene(options?: UseAssetPickerSceneOptions) {
     }
 
     const pickItem = (item: AssetPickerEntry): AssetPickerSelection | null => {
-        if (selectionMode.value !== 'file') {
-            return null
-        }
         if (!canSelect(item)) {
-            message.warning(text.value.missingAssetReferenceMessage)
+            if (selectionMode.value === 'file') {
+                message.warning(text.value.missingAssetReferenceMessage)
+            }
             return null
         }
         return buildAssetPickerSelection(item)

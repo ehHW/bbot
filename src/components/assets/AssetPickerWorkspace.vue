@@ -66,6 +66,7 @@
                 <FileNameCell
                     :name="record.display_name"
                     :is-dir="record.is_dir"
+                    :preview="buildEntryPreview(record)"
                     :clickable="record.is_dir"
                     @click="onEnterFolder(record)"
                 />
@@ -116,6 +117,7 @@
 import type { FileEntryItem, SearchFileEntryItem } from "@/api/upload";
 import type { ResolvedAssetPickerWorkspaceScene } from "@/components/assets/assetPickerScenes";
 import FileNameCell from "@/components/common/FileNameCell.vue";
+import { buildAssetPreviewFromFileEntry } from "@/utils/assetPreview";
 import { formatFileSize } from "@/utils/fileFormatter";
 import { formatDateTime } from "@/utils/timeFormatter";
 
@@ -171,4 +173,7 @@ const handleSearchSelect = async (
     emit("update:searchKeyword", value);
     await props.onSearchSelect(value, option);
 };
+
+const buildEntryPreview = (item: AssetPickerEntry) =>
+    buildAssetPreviewFromFileEntry(item);
 </script>

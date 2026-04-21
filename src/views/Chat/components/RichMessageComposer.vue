@@ -15,8 +15,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import {
+    createComposerAttachmentChipElement,
+    readComposerAttachmentTokenFromElement,
+} from '@/modules/chat-center/utils/chatAssetPrepare'
 import type { ChatComposerAttachmentToken, ChatComposerSegment } from '@/types/chat'
-import { formatFileSize } from '@/utils/fileFormatter'
 
 const props = defineProps<{
     disabled?: boolean
@@ -60,37 +63,7 @@ const focus = () => {
 }
 
 const createAttachmentChip = (attachment: ChatComposerAttachmentToken) => {
-    const chip = document.createElement('span')
-    chip.className = 'composer-attachment-chip'
-    chip.setAttribute('contenteditable', 'false')
-    chip.dataset.solbotAttachment = '1'
-    chip.dataset.tokenId = attachment.token_id
-    chip.dataset.sourceAssetReferenceId = String(attachment.source_asset_reference_id)
-    chip.dataset.displayName = attachment.display_name
-    chip.dataset.mediaType = attachment.media_type
-    chip.dataset.mimeType = attachment.mime_type || ''
-    chip.dataset.fileSize = String(attachment.file_size || '')
-    chip.dataset.url = attachment.url || ''
-    chip.dataset.streamUrl = attachment.stream_url || ''
-    chip.dataset.thumbnailUrl = attachment.thumbnail_url || ''
-    chip.dataset.processingStatus = attachment.processing_status || ''
-    chip.dataset.localUploadId = attachment.local_upload_id || ''
-    const mediaType = String(attachment.media_type || '').toLowerCase()
-    const isImage = mediaType === 'image' && Boolean(attachment.url)
-    const isVideo = mediaType === 'video' && Boolean(attachment.url)
-    const previewNode = isImage
-        ? `<img class="composer-attachment-chip__preview" src="${escapeHtml(attachment.url || '')}" alt="${escapeHtml(attachment.display_name)}" />`
-        : isVideo
-            ? `<video class="composer-attachment-chip__preview" src="${escapeHtml(attachment.url || '')}" muted playsinline preload="metadata"></video>`
-            : `<span class="composer-attachment-chip__icon">${mediaType === 'video' ? 'V' : 'F'}</span>`
-    chip.innerHTML = `
-        ${previewNode}
-        <span class="composer-attachment-chip__body">
-            <span class="composer-attachment-chip__name">${escapeHtml(attachment.display_name)}</span>
-            <span class="composer-attachment-chip__size">${attachment.file_size ? escapeHtml(formatFileSize(attachment.file_size)) : '大小未知'}</span>
-        </span>
-    `
-    return chip
+    return createComposerAttachmentChipElement(attachment)
 }
 
 const placeCaretAfterNode = (node: Node) => {
@@ -156,27 +129,7 @@ const clear = () => {
 }
 
 const readAttachmentFromElement = (element: HTMLElement): ChatComposerAttachmentToken | null => {
-    if (element.dataset.solbotAttachment !== '1') {
-        return null
-    }
-    const sourceAssetReferenceId = Number(element.dataset.sourceAssetReferenceId || 0)
-    const localUploadId = String(element.dataset.localUploadId || '')
-    if (!sourceAssetReferenceId && !localUploadId) {
-        return null
-    }
-    return {
-        token_id: element.dataset.tokenId || `attachment_${Date.now()}`,
-        source_asset_reference_id: sourceAssetReferenceId || undefined,
-        display_name: element.dataset.displayName || '附件',
-        media_type: element.dataset.mediaType || 'file',
-        mime_type: element.dataset.mimeType || '',
-        file_size: Number(element.dataset.fileSize || 0) || undefined,
-        url: element.dataset.url || '',
-        stream_url: element.dataset.streamUrl || '',
-        thumbnail_url: element.dataset.thumbnailUrl || '',
-        processing_status: element.dataset.processingStatus || '',
-        local_upload_id: localUploadId || undefined,
-    }
+    return readComposerAttachmentTokenFromElement(element)
 }
 
 const collectSegments = (node: Node, parts: ChatComposerSegment[]) => {
@@ -304,14 +257,6 @@ defineExpose<RichMessageComposerExpose>({
     insertText,
     insertAttachment,
 })
-
-function escapeHtml(value: string) {
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-}
 </script>
 
 <style scoped>
