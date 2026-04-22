@@ -1,5 +1,7 @@
 <template>
-    <a-layout-footer class="footer">Hyself ©2026 由 HY 创建</a-layout-footer>
+    <a-layout-footer class="footer"
+        >ICP备案/许可证号：鄂ICP备2026019376号</a-layout-footer
+    >
 </template>
 
 <script setup lang="ts"></script>
