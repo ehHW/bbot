@@ -1,7 +1,14 @@
 <template>
-    <a-layout-footer class="footer"
-        >ICP备案/许可证号：鄂ICP备2026019376号</a-layout-footer
-    >
+    <a-layout-footer class="footer">
+        <span>ICP备案/许可证号：</span>
+        <a
+            href="https://beian.miit.gov.cn/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-link"
+            >鄂ICP备2026019376号</a
+        >
+    </a-layout-footer>
 </template>
 
 <script setup lang="ts"></script>
@@ -13,5 +20,10 @@
     justify-content: center;
     align-items: center;
     padding: 0;
+    font-size: 12px;
+}
+
+.footer-link {
+    color: inherit;
 }
 </style>
