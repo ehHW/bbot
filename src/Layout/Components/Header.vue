@@ -1,6 +1,6 @@
 <template>
     <a-layout-header class="header">
-        <span class="title">{{ title }}</span>
+        <GlobalAudioPlayer />
         <div class="search-area">
             <a-auto-complete
                 v-model:value="searchQuery"
@@ -49,9 +49,6 @@
             </div>
             <a-dropdown :trigger="['hover']">
                 <div class="user-trigger">
-                    <a-avatar :size="30" :src="avatar || undefined">
-                        {{ avatarText }}
-                    </a-avatar>
                     <span class="name">{{ username }}</span>
                     <DownOutlined class="trigger-arrow" />
                 </div>
@@ -76,6 +73,7 @@ import {
 import { message } from "ant-design-vue";
 import { useRouter } from "vue-router";
 import type { RouteRecordRaw } from "vue-router";
+import GlobalAudioPlayer from "@/components/Audio/GlobalAudioPlayer.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useSettingsStore } from "@/stores/settings";
 import { useUserStore } from "@/stores/user";
@@ -92,14 +90,6 @@ const userStore = useUserStore();
 const username = computed(
     () => userStore.user?.display_name || userStore.user?.username || "-",
 );
-const avatar = computed(() => userStore.user?.avatar || "");
-const avatarText = computed(() =>
-    (userStore.user?.display_name || userStore.user?.username || "?").slice(
-        0,
-        1,
-    ),
-);
-const title = computed(() => settingsStore.systemTitle);
 const refreshing = ref(false);
 const themeSwitching = ref(false);
 const MIN_REFRESH_SPIN_MS = 960;
@@ -270,6 +260,11 @@ const refreshCurrentSession = async () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
+}
+
+.header :deep(.global-audio-player) {
+    flex: 0 0 auto;
 }
 
 .title {
@@ -282,13 +277,14 @@ const refreshCurrentSession = async () => {
 
 .search-area {
     flex: 1;
+    min-width: 0;
     display: flex;
     justify-content: center;
-    padding-inline: 16px;
+    padding-inline: 10px;
 }
 
 .header-search {
-    width: 280px;
+    width: min(280px, 100%);
 }
 
 .right {
@@ -357,22 +353,33 @@ const refreshCurrentSession = async () => {
 .user-trigger {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     cursor: pointer;
-}
-
-:deep(.ant-avatar-string) {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) !important;
+    padding-inline: 4px;
 }
 
 .name {
     color: var(--text-secondary);
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .trigger-arrow {
     color: var(--text-secondary);
     font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+    .search-area {
+        max-width: 180px;
+    }
+}
+
+@media (max-width: 980px) {
+    .search-area {
+        display: none;
+    }
 }
 </style>

@@ -116,6 +116,7 @@ export interface ChatMessageAssetPayload {
     local_upload_id?: string
     extra_metadata?: {
         video_processing?: ChatVideoProcessingMetadata
+        audio_processing?: ChatVideoProcessingMetadata
         [key: string]: unknown
     }
 }

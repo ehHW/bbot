@@ -148,7 +148,7 @@ class GlobalWebSocketManager {
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-        const url = `${protocol}://${window.location.host}/ws/global/?token=${encodeURIComponent(this.token)}`
+        const url = `${protocol}://${window.location.host}/api1/ws/global/?token=${encodeURIComponent(this.token)}`
         this.statusRef.value = this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting'
         this.pushLog(`开始建立连接: 第 ${this.reconnectAttempts + 1} 次`)
 

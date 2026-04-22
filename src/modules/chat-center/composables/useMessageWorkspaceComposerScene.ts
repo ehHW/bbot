@@ -2,12 +2,14 @@ import { message } from "ant-design-vue";
 import { ref, type ComputedRef, type Ref } from "vue";
 import type { AssetPickerSelection } from "@/components/assets/assetPickerAdapter";
 import {
+    buildComposerAttachmentToken,
     prepareChatComposerAssetFromSelection,
     prepareChatComposerAssetFromUploadResult,
 } from "@/modules/chat-center/utils/chatAssetPrepare";
 import type {
     ChatComposerAttachmentToken,
     ChatMessageItem,
+    ChatMessageAssetPayload,
 } from "@/types/chat";
 import { getErrorMessage } from "@/utils/error";
 import { uploadFileWithCategory } from "@/utils/fileUploader";
@@ -57,61 +59,44 @@ export function useMessageWorkspaceComposerScene(
         return "";
     };
 
+    const localFilesMap = new Map<string, File>();
+
     const insertAttachmentToken = (token: ChatComposerAttachmentToken) => {
         composerRef.value?.insertAttachment(token);
     };
 
-    const uploadFilesToPreparedAssets = async (files: File[]) => {
+    const prepareLocalFilesForComposer = async (files: File[]) => {
         if (!files.length) {
             return;
         }
-        if (!options.authAccessToken.value) {
-            message.error("登录状态无效，无法准备附件");
-            return;
-        }
 
-        attachmentUploading.value = true;
         let successCount = 0;
-        let failedCount = 0;
-        let firstError: unknown = null;
 
-        try {
-            for (const file of files) {
-                try {
-                    const result = await uploadFileWithCategory({
-                        file,
-                        category: "chat",
-                        token: options.authAccessToken.value,
-                    });
-                    const preparedAsset =
-                        prepareChatComposerAssetFromUploadResult(result);
-                    insertAttachmentToken(preparedAsset.attachmentToken);
-                    successCount += 1;
-                } catch (error: unknown) {
-                    failedCount += 1;
-                    if (!firstError) {
-                        firstError = error;
-                    }
-                }
-            }
-        } finally {
-            attachmentUploading.value = false;
+        for (const file of files) {
+            const localUploadId = `local_file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+            localFilesMap.set(localUploadId, file);
+
+            const mediaType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "file";
+            const attachmentToken = buildComposerAttachmentToken({
+                localUploadId,
+                displayName: file.name,
+                mediaType,
+                mimeType: file.type,
+                fileSize: file.size,
+                url: URL.createObjectURL(file), // Provide a local object URL for preview
+            });
+
+            insertAttachmentToken(attachmentToken);
+            successCount += 1;
         }
 
-        if (failedCount === 0) {
+        if (successCount > 0) {
             message.success(
                 successCount === 1
                     ? "附件已加入输入框"
                     : `已加入 ${successCount} 个附件`,
             );
-            return;
         }
-
-        const baseMessage =
-            successCount > 0
-                ? `已加入 ${successCount} 个附件，另有 ${failedCount} 个准备失败`
-                : "准备附件失败";
-        message.error(getErrorMessage(firstError, baseMessage));
     };
 
     const handleComposerPasteFiles = async (files: File[]) => {
@@ -123,7 +108,7 @@ export function useMessageWorkspaceComposerScene(
         if (!files.length) {
             return;
         }
-        await uploadFilesToPreparedAssets(files);
+        await prepareLocalFilesForComposer(files);
     };
 
     const handleSendMessage = async () => {
@@ -144,32 +129,74 @@ export function useMessageWorkspaceComposerScene(
         }
         const quotedMessageId = options.quotedMessage.value?.id;
         try {
+            const sendPromises: Promise<unknown>[] = [];
             for (const segment of segments) {
                 if (segment.kind === "text") {
-                    await options.chatMessage.sendTextMessage(segment.text, quotedMessageId);
+                    sendPromises.push(options.chatMessage.sendTextMessage(segment.text, quotedMessageId));
                     continue;
                 }
                 const sourceAssetReferenceId = Number(
                     segment.attachment.source_asset_reference_id || 0,
                 );
-                if (!sourceAssetReferenceId) {
+                const localUploadId = segment.attachment.local_upload_id;
+
+                if (!sourceAssetReferenceId && !localUploadId) {
                     throw new Error("附件尚未准备完成，请重新选择后再发送");
                 }
-                await options.chatMessage.sendAttachmentMessage({
-                    sourceAssetReferenceId,
-                    displayName: segment.attachment.display_name,
-                    mediaType: segment.attachment.media_type,
-                    mimeType: segment.attachment.mime_type,
-                    fileSize: segment.attachment.file_size,
-                    url: segment.attachment.url,
-                    streamUrl: segment.attachment.stream_url,
-                    thumbnailUrl: segment.attachment.thumbnail_url,
-                    processingStatus: segment.attachment.processing_status,
-                    quotedMessageId,
-                });
+
+                if (sourceAssetReferenceId) {
+                    sendPromises.push(options.chatMessage.sendAttachmentMessage({
+                        sourceAssetReferenceId,
+                        displayName: segment.attachment.display_name,
+                        mediaType: segment.attachment.media_type,
+                        mimeType: segment.attachment.mime_type,
+                        fileSize: segment.attachment.file_size,
+                        url: segment.attachment.url,
+                        streamUrl: segment.attachment.stream_url,
+                        thumbnailUrl: segment.attachment.thumbnail_url,
+                        processingStatus: segment.attachment.processing_status,
+                        quotedMessageId,
+                    }));
+                } else if (localUploadId) {
+                    const file = localFilesMap.get(localUploadId);
+                    if (!file) throw new Error("无法读取本地文件");
+                    if (!options.authAccessToken.value) throw new Error("会话无效，无法上传");
+
+                    sendPromises.push(options.chatMessage.sendAttachmentMessage({
+                        displayName: file.name,
+                        mediaType: segment.attachment.media_type,
+                        mimeType: file.type,
+                        fileSize: file.size,
+                        url: segment.attachment.url, // Object URL
+                        quotedMessageId,
+                        uploadBeforeSend: async (updateProgress: (payloadPatch: Partial<ChatMessageAssetPayload>) => void) => {
+                            const result = await uploadFileWithCategory({
+                                file,
+                                category: "chat",
+                                token: options.authAccessToken.value!,
+                                onChunkProgress: (progress) => {
+                                    updateProgress({ upload_progress: progress });
+                                }
+                            });
+                            const prepared = prepareChatComposerAssetFromUploadResult(result);
+                            return {
+                                sourceAssetReferenceId: prepared.attachmentToken.source_asset_reference_id!,
+                                displayName: prepared.attachmentToken.display_name,
+                                mediaType: prepared.attachmentToken.media_type,
+                                mimeType: prepared.attachmentToken.mime_type,
+                                fileSize: prepared.attachmentToken.file_size,
+                                url: prepared.attachmentToken.url,
+                                streamUrl: prepared.attachmentToken.stream_url,
+                                thumbnailUrl: prepared.attachmentToken.thumbnail_url,
+                                processingStatus: prepared.attachmentToken.processing_status,
+                            };
+                        }
+                    }));
+                }
             }
             composerRef.value?.clear();
             options.quotedMessage.value = null;
+            await Promise.all(sendPromises);
         } catch (error: unknown) {
             message.error(getErrorMessage(error, "发送消息失败"));
         } finally {
@@ -242,7 +269,7 @@ export function useMessageWorkspaceComposerScene(
             message.warning(guardMessage);
             return;
         }
-        await uploadFilesToPreparedAssets(files);
+        await prepareLocalFilesForComposer(files);
     };
 
     const stopTypingSoon = () => {

@@ -69,7 +69,7 @@ export default defineConfig({
         cssCodeSplit: true,
         sourcemap: false,
         reportCompressedSize: false,
-        chunkSizeWarningLimit: 900,
+        chunkSizeWarningLimit: 1500,
         rollupOptions: {
             output: {
                 entryFileNames: 'js/[name]-[hash].js',
@@ -85,19 +85,20 @@ export default defineConfig({
     server: {
         // allowedHosts: ['frp-end.com'],
         proxy: {
-            '/api': {
-                target: apiProxyTarget,
-                changeOrigin: true
-            },
-            '/ws/': {
+            '/api1/ws/': {
                 target: wsProxyTarget,
                 ws: true,
                 changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api1\/ws/, '/api1/ws'),
                 configure(proxy) {
                     suppressBenignProxyErrors(proxy)
                 }
             },
-            '/uploads': {
+            '/api1': {
+                target: apiProxyTarget,
+                changeOrigin: true
+            },
+            '/api1/uploads': {
                 target: apiProxyTarget,
                 changeOrigin: true
             }

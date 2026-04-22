@@ -98,6 +98,16 @@
                 </a-breadcrumb>
 
                 <a-space>
+                    <a-popconfirm
+                        v-if="isSystemScope && canManageSystemResource"
+                        title="确认将系统资源归零？"
+                        description="会清空资源中心数据库条目，并尝试清理对应本地文件，操作不可撤销。"
+                        ok-text="确认归零"
+                        cancel-text="取消"
+                        @confirm="resetSystemResourceCenter"
+                    >
+                        <a-button danger>资源中心归零</a-button>
+                    </a-popconfirm>
                     <template v-if="isRecycleBinView">
                         <a-button
                             v-if="canRestoreResource"
@@ -227,6 +237,11 @@
                                     >编辑</a
                                 >
                                 <a
+                                    v-if="canPlayAudioRecord(record)"
+                                    @click="playAudioRecord(record)"
+                                    >播放</a
+                                >
+                                <a
                                     v-if="
                                         !record.is_dir &&
                                         getEntryPreviewUrl(record)
@@ -312,6 +327,7 @@ import { useAssetPickerScene } from "@/components/assets/useAssetPickerScene";
 import UploadTaskPanel from "@/views/FileManage/components/UploadTaskPanel.vue";
 import { createFileManageRealtimeRuntime } from "@/views/FileManage/resourceRealtimeRuntime";
 import { useFileStore } from "@/stores/file";
+import { useGlobalAudioStore } from "@/stores/globalAudio";
 import { useUserStore } from "@/stores/user";
 import { subscribeAppRefresh } from "@/utils/appRefresh";
 import {
@@ -325,6 +341,7 @@ import { trimText } from "@/validators/common";
 import { searchFileEntriesApi } from "@/api/upload";
 
 const fileStore = useFileStore();
+const globalAudioStore = useGlobalAudioStore();
 const userStore = useUserStore();
 const route = useRoute();
 const router = useRouter();
@@ -541,6 +558,53 @@ const formatEntryPreviewSize = (item: FileEntryItem | SearchFileEntryItem) =>
 
 const getEntryPreviewUrl = (item: FileEntryItem | SearchFileEntryItem) =>
     getAssetPreviewPrimaryUrl(buildEntryPreview(item));
+
+const canPlayAudioRecord = (item: FileEntryItem | SearchFileEntryItem) => {
+    const asset = item.asset || item.asset_reference?.asset || null;
+    const extraMetadata = (asset?.extra_metadata || {}) as Record<
+        string,
+        unknown
+    >;
+    const audioProcessing = (extraMetadata.audio_processing || {}) as Record<
+        string,
+        unknown
+    >;
+    const mediaType = String(asset?.media_type || "").toLowerCase();
+    return (
+        !item.is_dir &&
+        mediaType === "audio" &&
+        Boolean(
+            String(audioProcessing.stream_url || asset?.url || item.url || ""),
+        )
+    );
+};
+
+const playAudioRecord = (item: FileEntryItem | SearchFileEntryItem) => {
+    const asset = item.asset || item.asset_reference?.asset || null;
+    const extraMetadata = (asset?.extra_metadata || {}) as Record<
+        string,
+        unknown
+    >;
+    const audioProcessing = (extraMetadata.audio_processing || {}) as Record<
+        string,
+        unknown
+    >;
+    const sourceUrl = String(
+        audioProcessing.stream_url || asset?.url || item.url || "",
+    ).trim();
+    if (!sourceUrl) {
+        message.warning("当前音频还没有可播放源，请等待转码完成");
+        return;
+    }
+    globalAudioStore.playTrack({
+        id: Number(asset?.id || item.asset_reference_id || item.id),
+        title: item.display_name,
+        coverUrl: String(audioProcessing.cover_url || "").trim() || undefined,
+        lrcUrl: String(audioProcessing.lyrics_url || "").trim() || undefined,
+        m4aUrl: sourceUrl,
+        sourceUrl,
+    });
+};
 
 const isRecycleBinView = computed(
     () =>
@@ -885,6 +949,22 @@ const clearAllRecycleBin = async () => {
         message.success("回收站已清空");
     } catch (error: unknown) {
         message.error(getErrorMessage(error, "清空回收站失败"));
+    }
+};
+
+const resetSystemResourceCenter = async () => {
+    if (!isSystemScope.value) {
+        return;
+    }
+    try {
+        const result = await fileStore.resetSystemResourceCenter();
+        selectedRecycleIds.value = [];
+        resourceSelectionResult.value = null;
+        message.success(
+            `${result.detail}（已删文件 ${result.removed_db_files}，目录 ${result.removed_db_dirs}，本地文件 ${result.removed_disk_files}）`,
+        );
+    } catch (error: unknown) {
+        message.error(getErrorMessage(error, "资源中心归零失败"));
     }
 };
 

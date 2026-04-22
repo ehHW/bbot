@@ -65,6 +65,7 @@ declare module 'vue' {
     AUpload: typeof import('ant-design-vue/es')['Upload']
     AvatarCropModal: typeof import('./src/components/AvatarCropModal.vue')['default']
     FileNameCell: typeof import('./src/components/common/FileNameCell.vue')['default']
+    GlobalAudioPlayer: typeof import('./src/components/Audio/GlobalAudioPlayer.vue')['default']
     RouteOutlet: typeof import('./src/components/common/RouteOutlet.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

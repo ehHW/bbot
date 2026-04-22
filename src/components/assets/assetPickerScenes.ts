@@ -108,6 +108,48 @@ export const SYSTEM_RESOURCE_EMBEDDED_ASSET_PICKER_SCENE: AssetPickerWorkspaceSc
     },
 }
 
+export const UPLOAD_TARGET_FOLDER_ASSET_PICKER_SCENE: AssetPickerWorkspaceSceneInput = {
+    banner: {
+        type: 'info',
+        showIcon: true,
+        message: '选择上传目录',
+        description: '从资源中心选择一个普通目录，当前上传批次会把文件写入这里。',
+    },
+    pageSize: 6,
+    picker: {
+        selectionMode: 'folder',
+        allowedKinds: ['resource_center', 'chat_attachment', 'chat_upload'],
+    },
+    showRefresh: false,
+    showSearch: false,
+    text: {
+        rootBreadcrumbName: '资源中心',
+    },
+}
+
+export const SAVE_TO_RESOURCE_ASSET_PICKER_SCENE: AssetPickerDialogSceneInput = {
+    title: '保存到资源中心',
+    width: 720,
+    workspace: {
+        banner: {
+            type: 'info',
+            showIcon: true,
+            message: '选择保存目录',
+            description: '请在资源中心中选择一个目标目录，用来存放该聊天附件。',
+        },
+        pageSize: 10,
+        picker: {
+            selectionMode: 'folder',
+            allowedKinds: ['resource_center'],
+        },
+        showRefresh: true,
+        showSearch: false,
+        text: {
+            rootBreadcrumbName: '资源中心',
+        },
+    },
+}
+
 export const SYSTEM_RESOURCE_ASSET_PICKER_DIALOG_SCENE: AssetPickerDialogSceneInput = {
     title: '选择系统资源文件',
     width: 720,
@@ -123,25 +165,7 @@ export const SYSTEM_RESOURCE_ASSET_PICKER_DIALOG_SCENE: AssetPickerDialogSceneIn
     },
 }
 
-export const UPLOAD_TARGET_FOLDER_ASSET_PICKER_SCENE: AssetPickerWorkspaceSceneInput = {
-    banner: {
-        type: 'info',
-        showIcon: true,
-        message: '上传目录选择',
-        description: '从资源中心选择一个普通目录，作为当前上传批次的目标目录。',
-    },
-    pageSize: 8,
-    picker: {
-        selectionMode: 'folder',
-        allowedKinds: ['directory'],
-    },
-    showRefresh: true,
-    showSearch: true,
-    text: {
-        rootBreadcrumbName: '我的文件',
-        selectActionText: '选中目录',
-    },
-}
+
 
 export function resolveAssetPickerWorkspaceScene(
     scene?: AssetPickerWorkspaceSceneInput,

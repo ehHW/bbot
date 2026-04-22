@@ -122,6 +122,10 @@ export function getAssetPreviewStreamUrl(
 export function getAssetPreviewPrimaryUrl(
     preview?: AssetPreviewModel | null,
 ) {
+    const mediaType = getNormalizedAssetPreviewMediaType(preview)
+    if (mediaType === 'audio') {
+        return getAssetPreviewStreamUrl(preview) || getAssetPreviewSourceUrl(preview)
+    }
     return getAssetPreviewSourceUrl(preview) || getAssetPreviewStreamUrl(preview)
 }
 
@@ -188,6 +192,7 @@ function getResourceEntryAsset(item: ResourceEntryLike) {
 export function buildAssetPreviewFromFileEntry(item: ResourceEntryLike): AssetPreviewModel {
     const asset = getResourceEntryAsset(item)
     const videoProcessing = resolveVideoProcessingMetadata(asset?.extra_metadata?.video_processing)
+    const audioProcessing = resolveVideoProcessingMetadata(asset?.extra_metadata?.audio_processing)
 
     return normalizeAssetPreviewModel({
         displayName: item.display_name,
@@ -195,12 +200,12 @@ export function buildAssetPreviewFromFileEntry(item: ResourceEntryLike): AssetPr
         mimeType: asset?.mime_type,
         fileSize: asset?.file_size || item.file_size,
         url: asset?.url || item.url,
-        streamUrl: videoProcessing?.playlist_url,
-        thumbnailUrl: videoProcessing?.thumbnail_url,
-        processingStatus: videoProcessing?.status,
+        streamUrl: videoProcessing?.playlist_url || audioProcessing?.stream_url,
+        thumbnailUrl: videoProcessing?.thumbnail_url || audioProcessing?.cover_url,
+        processingStatus: videoProcessing?.status || audioProcessing?.status,
         width: asset?.width ?? videoProcessing?.width,
         height: asset?.height ?? videoProcessing?.height,
-        durationSeconds: asset?.duration_seconds ?? videoProcessing?.duration_seconds,
+        durationSeconds: asset?.duration_seconds ?? videoProcessing?.duration_seconds ?? audioProcessing?.duration_seconds,
         isDirectory: item.is_dir,
         isVirtual: item.is_virtual,
     })
@@ -219,6 +224,7 @@ export function buildAssetPreviewFromChatMessageAssetPayload(
         duration_seconds?: number | null
     }
     const videoProcessing = resolveVideoProcessingMetadata(payload.extra_metadata?.video_processing)
+    const audioProcessing = resolveVideoProcessingMetadata(payload.extra_metadata?.audio_processing)
 
     return normalizeAssetPreviewModel({
         displayName: payload.display_name || options?.fallbackDisplayName,
@@ -226,12 +232,12 @@ export function buildAssetPreviewFromChatMessageAssetPayload(
         mimeType: payload.mime_type,
         fileSize: payload.file_size,
         url: payload.url,
-        streamUrl: payload.stream_url || videoProcessing?.playlist_url,
-        thumbnailUrl: payload.thumbnail_url || videoProcessing?.thumbnail_url,
-        processingStatus: payload.processing_status || videoProcessing?.status,
+        streamUrl: payload.stream_url || videoProcessing?.playlist_url || audioProcessing?.stream_url,
+        thumbnailUrl: payload.thumbnail_url || videoProcessing?.thumbnail_url || audioProcessing?.cover_url,
+        processingStatus: payload.processing_status || videoProcessing?.status || audioProcessing?.status,
         width: rawPayload.width ?? videoProcessing?.width,
         height: rawPayload.height ?? videoProcessing?.height,
-        durationSeconds: rawPayload.duration_seconds ?? videoProcessing?.duration_seconds,
+        durationSeconds: rawPayload.duration_seconds ?? videoProcessing?.duration_seconds ?? audioProcessing?.duration_seconds,
         isDirectory: false,
         isVirtual: false,
     })

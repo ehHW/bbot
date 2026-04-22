@@ -1,10 +1,9 @@
 import { message } from "ant-design-vue";
 import { computed, ref, type ComputedRef } from "vue";
 import type { FileEntryItem } from "@/api/upload";
+import type { AssetPickerSelection } from "@/components/assets/assetPickerAdapter";
 import { applyGroupInvitationApi } from "@/api/chat";
 import {
-    createFolderApi,
-    getFileEntriesApi,
     saveChatAttachmentToResourceApi,
 } from "@/api/upload";
 import type {
@@ -23,6 +22,7 @@ import {
     isPreviewableAssetPreview,
 } from "@/utils/assetPreview";
 import { getErrorMessage } from "@/utils/error";
+import { useGlobalAudioStore } from "@/stores/globalAudio";
 import { trimText } from "@/validators/common";
 
 type UseMessageWorkspaceAssetSceneOptions = {
@@ -42,6 +42,7 @@ type UseMessageWorkspaceAssetSceneOptions = {
 export function useMessageWorkspaceAssetScene(
     options: UseMessageWorkspaceAssetSceneOptions,
 ) {
+    const globalAudioStore = useGlobalAudioStore();
     const assetPreviewOpen = ref(false);
     const previewingAssetMessage = ref<ChatMessageItem | null>(null);
     const groupInvitationModalOpen = ref(false);
@@ -49,15 +50,7 @@ export function useMessageWorkspaceAssetScene(
     const groupInvitationApplying = ref(false);
     const saveAssetDialogOpen = ref(false);
     const saveAssetPendingMessage = ref<ChatMessageItem | null>(null);
-    const saveAssetLoading = ref(false);
     const saveAssetSaving = ref(false);
-    const saveAssetCreateFolderOpen = ref(false);
-    const saveAssetFolderName = ref("");
-    const saveAssetCurrentParentId = ref<number | null>(null);
-    const saveAssetFolderEntries = ref<FileEntryItem[]>([]);
-    const saveAssetBreadcrumbs = ref<Array<{ id: number | null; name: string }>>([
-        { id: null, name: "我的文件" },
-    ]);
 
     const getAssetMessagePayload = (
         messageItem: ChatMessageItem,
@@ -143,6 +136,76 @@ export function useMessageWorkspaceAssetScene(
     const showVideoPlayOverlay = (messageItem: ChatMessageItem) =>
         canPreviewVideo(messageItem) && !isAssetUploading(messageItem);
 
+    const isAudioMessage = (messageItem: ChatMessageItem) => {
+        const preview = getAssetPreview(messageItem);
+        const mediaType = String(preview?.mediaType || "").toLowerCase();
+        const mimeType = String(preview?.mimeType || "").toLowerCase();
+        return mediaType === "audio" || mimeType.startsWith("audio/");
+    };
+
+    const formatDuration = (totalSeconds: number) => {
+        const normalized = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+        const minutes = Math.floor(normalized / 60);
+        const seconds = normalized % 60;
+        return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    };
+
+    const getMessageTrackId = (messageItem: ChatMessageItem) => {
+        const payload = getAssetMessagePayload(messageItem);
+        return Number(
+            payload?.asset_reference_id
+            || payload?.source_asset_reference_id
+            || messageItem.id,
+        );
+    };
+
+    const getAudioDurationText = (messageItem: ChatMessageItem) => {
+        const preview = getAssetPreview(messageItem);
+        const totalSeconds = Number(preview?.durationSeconds || 0);
+        if (totalSeconds <= 0) {
+            return "";
+        }
+        const totalText = formatDuration(totalSeconds);
+        const trackId = getMessageTrackId(messageItem);
+        const isCurrentTrack = globalAudioStore.isCurrentTrack(trackId);
+        const currentText = formatDuration(globalAudioStore.currentTime);
+        if (isCurrentTrack && (globalAudioStore.isPlaying || globalAudioStore.currentTime > 0)) {
+            return `${currentText}/${totalText}`;
+        }
+        return totalText;
+    };
+
+    const isAudioPlaying = (messageItem: ChatMessageItem) => {
+        const trackId = getMessageTrackId(messageItem);
+        return globalAudioStore.isCurrentTrack(trackId) && globalAudioStore.isPlaying;
+    };
+
+    const toggleAudioPlayback = (messageItem: ChatMessageItem) => {
+        const preview = getAssetPreview(messageItem);
+        const sourceUrl = getAssetPreviewPrimaryUrl(preview);
+        if (!sourceUrl) {
+            return;
+        }
+        const payload = getAssetMessagePayload(messageItem);
+        const audioProcessing =
+            (payload?.extra_metadata?.audio_processing || {}) as Record<
+                string,
+                unknown
+            >;
+        const trackId = getMessageTrackId(messageItem);
+        if (globalAudioStore.isCurrentTrack(trackId)) {
+            globalAudioStore.requestToggle();
+            return;
+        }
+        globalAudioStore.requestPlayTrack({
+            id: trackId,
+            title: preview?.displayName || messageItem.content || "音频",
+            coverUrl: String(audioProcessing["cover_url"] || "") || undefined,
+            lrcUrl: String(audioProcessing["lyrics_url"] || "") || undefined,
+            m4aUrl: sourceUrl,
+        });
+    };
+
     const getGroupInvitationPayload = (messageItem: ChatMessageItem) => {
         const payload = messageItem.payload as {
             group_invitation?: ChatGroupInvitationPayload;
@@ -198,17 +261,7 @@ export function useMessageWorkspaceAssetScene(
     };
 
     const loadSaveAssetFolders = async (parentId?: number | null) => {
-        saveAssetLoading.value = true;
-        try {
-            const { data } = await getFileEntriesApi(parentId ?? null);
-            saveAssetCurrentParentId.value = parentId ?? null;
-            saveAssetBreadcrumbs.value = data.breadcrumbs;
-            saveAssetFolderEntries.value = data.items.filter(
-                (item) => item.is_dir && !item.is_recycle_bin,
-            );
-        } finally {
-            saveAssetLoading.value = false;
-        }
+        // Obsolete
     };
 
     const openPreviewableAsset = (messageItem: ChatMessageItem) => {
@@ -218,6 +271,10 @@ export function useMessageWorkspaceAssetScene(
 
     const openAssetMessage = (messageItem: ChatMessageItem) => {
         if (!hasAssetPlaybackSource(messageItem)) {
+            return;
+        }
+        if (isAudioMessage(messageItem)) {
+            toggleAudioPlayback(messageItem);
             return;
         }
         if (!isPreviewableAssetMessage(messageItem)) {
@@ -248,57 +305,19 @@ export function useMessageWorkspaceAssetScene(
     };
 
     const toggleSaveAssetFolderInline = () => {
-        if (!options.canCreateFolderInResource.value) {
-            message.warning("当前角色无创建目录权限");
-            return;
-        }
-        saveAssetCreateFolderOpen.value = !saveAssetCreateFolderOpen.value;
-        if (!saveAssetCreateFolderOpen.value) {
-            saveAssetFolderName.value = "";
-        }
+        // Obsolete
     };
 
     const openSaveAssetBreadcrumb = async (id: number | null) => {
-        try {
-            await loadSaveAssetFolders(id);
-        } catch (error: unknown) {
-            message.error(getErrorMessage(error, "打开目录失败"));
-        }
+        // Obsolete
     };
 
     const enterSaveAssetFolder = async (folder: FileEntryItem) => {
-        try {
-            await loadSaveAssetFolders(folder.id);
-        } catch (error: unknown) {
-            message.error(getErrorMessage(error, "进入目录失败"));
-        }
+        // Obsolete
     };
 
     const handleCreateSaveAssetFolder = async () => {
-        if (!options.canCreateFolderInResource.value) {
-            message.warning("当前角色无创建目录权限");
-            return;
-        }
-        const folderName = trimText(saveAssetFolderName.value);
-        if (!folderName) {
-            message.warning("请输入目录名称");
-            return;
-        }
-        saveAssetSaving.value = true;
-        try {
-            await createFolderApi({
-                name: folderName,
-                parent_id: saveAssetCurrentParentId.value,
-            });
-            saveAssetFolderName.value = "";
-            saveAssetCreateFolderOpen.value = false;
-            await loadSaveAssetFolders(saveAssetCurrentParentId.value);
-            message.success("目录已创建");
-        } catch (error: unknown) {
-            message.error(getErrorMessage(error, "创建目录失败"));
-        } finally {
-            saveAssetSaving.value = false;
-        }
+        // Obsolete
     };
 
     const openSaveAssetDialog = async (messageItem: ChatMessageItem) => {
@@ -311,22 +330,15 @@ export function useMessageWorkspaceAssetScene(
         }
         saveAssetPendingMessage.value = messageItem;
         saveAssetDialogOpen.value = true;
-        saveAssetCreateFolderOpen.value = false;
-        saveAssetFolderName.value = "";
-        try {
-            await loadSaveAssetFolders(null);
-            return true;
-        } catch (error: unknown) {
-            saveAssetDialogOpen.value = false;
-            saveAssetPendingMessage.value = null;
-            message.error(getErrorMessage(error, "加载目录失败"));
-            return false;
-        }
+        return true;
     };
 
-    const confirmSaveAssetToResource = async () => {
+    const confirmSaveAssetToResource = async (selection: AssetPickerSelection) => {
         if (!options.canSaveChatAttachmentToResource.value) {
             message.warning("当前角色无保存聊天附件权限");
+            return;
+        }
+        if (selection.kind !== "folder") {
             return;
         }
         const currentMessage = saveAssetPendingMessage.value;
@@ -346,7 +358,7 @@ export function useMessageWorkspaceAssetScene(
         try {
             await saveChatAttachmentToResourceApi({
                 source_asset_reference_id: sourceAssetReferenceId,
-                parent_id: saveAssetCurrentParentId.value,
+                parent_id: selection.entryId,
                 display_name:
                     payload?.display_name || currentMessage.content || undefined,
             });
@@ -393,12 +405,7 @@ export function useMessageWorkspaceAssetScene(
         groupInvitationModalOpen,
         groupInvitationApplying,
         saveAssetDialogOpen,
-        saveAssetLoading,
         saveAssetSaving,
-        saveAssetCreateFolderOpen,
-        saveAssetFolderName,
-        saveAssetFolderEntries,
-        saveAssetBreadcrumbs,
         assetPreviewTitle,
         activeGroupInvitation,
         getAssetMessagePayload,
@@ -414,6 +421,9 @@ export function useMessageWorkspaceAssetScene(
         getAssetUploadProgress,
         isAssetUploading,
         showVideoPlayOverlay,
+        isAudioMessage,
+        isAudioPlaying,
+        getAudioDurationText,
         getGroupInvitationPayload,
         isChatRecordMessage,
         hasMessageBubbleAction,
@@ -422,10 +432,6 @@ export function useMessageWorkspaceAssetScene(
         openGroupInvitationModal,
         handleMessageBubbleClick,
         triggerAssetDownload,
-        toggleSaveAssetFolderInline,
-        openSaveAssetBreadcrumb,
-        enterSaveAssetFolder,
-        handleCreateSaveAssetFolder,
         openSaveAssetDialog,
         confirmSaveAssetToResource,
         handleApplyGroupInvitation,

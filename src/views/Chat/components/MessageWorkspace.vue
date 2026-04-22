@@ -456,6 +456,16 @@
                                                             messageItem,
                                                         )
                                                     "
+                                                    :playing="
+                                                        isAudioPlaying(
+                                                            messageItem,
+                                                        )
+                                                    "
+                                                    :audio-duration-text="
+                                                        getAudioDurationText(
+                                                            messageItem,
+                                                        )
+                                                    "
                                                 />
                                             </div>
                                         </template>
@@ -1488,77 +1498,11 @@
             </div>
         </a-modal>
 
-        <a-modal
+        <AssetPickerDialog
             v-model:open="saveAssetDialogOpen"
-            title="选择保存位置"
-            ok-text="保存"
-            cancel-text="取消"
-            @ok="confirmSaveAssetToResource"
-        >
-            <div class="target-modal-toolbar">
-                <a-breadcrumb class="target-modal-toolbar__breadcrumb">
-                    <a-breadcrumb-item
-                        v-for="item in saveAssetBreadcrumbs"
-                        :key="String(item.id ?? 'root')"
-                    >
-                        <a @click="openSaveAssetBreadcrumb(item.id)">{{
-                            item.name
-                        }}</a>
-                    </a-breadcrumb-item>
-                </a-breadcrumb>
-                <a-button
-                    type="primary"
-                    ghost
-                    size="small"
-                    :disabled="!canCreateFolderInResource"
-                    @click="toggleSaveAssetFolderInline"
-                    >新建文件夹</a-button
-                >
-            </div>
-            <div
-                v-if="saveAssetCreateFolderOpen"
-                class="target-modal-toolbar__inline"
-            >
-                <a-input
-                    v-model:value="saveAssetFolderName"
-                    placeholder="输入目录名称"
-                    @press-enter="handleCreateSaveAssetFolder"
-                />
-                <a-button
-                    type="primary"
-                    size="small"
-                    :loading="saveAssetSaving"
-                    @click="handleCreateSaveAssetFolder"
-                    >创建</a-button
-                >
-                <a-button
-                    size="small"
-                    :disabled="saveAssetSaving"
-                    @click="toggleSaveAssetFolderInline"
-                    >取消</a-button
-                >
-            </div>
-            <a-table
-                :columns="saveAssetColumns"
-                :data-source="saveAssetFolderEntries"
-                row-key="id"
-                size="small"
-                :pagination="false"
-                :loading="saveAssetLoading"
-            >
-                <template #bodyCell="{ column, record }">
-                    <template v-if="column.key === 'name'">
-                        <button
-                            type="button"
-                            class="save-asset-folder-button"
-                            @click="enterSaveAssetFolder(record)"
-                        >
-                            {{ record.display_name }}
-                        </button>
-                    </template>
-                </template>
-            </a-table>
-        </a-modal>
+            :scene="SAVE_TO_RESOURCE_ASSET_PICKER_SCENE"
+            @select="confirmSaveAssetToResource"
+        />
 
         <AssetPickerDialog
             v-model:open="assetPickerOpen"
@@ -1590,6 +1534,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import AvatarCropModal from "@/components/AvatarCropModal.vue";
 import AssetPickerDialog from "@/components/assets/AssetPickerDialog.vue";
+import { SAVE_TO_RESOURCE_ASSET_PICKER_SCENE } from "@/components/assets/assetPickerScenes";
 import ChatWorkspaceForwardDialogs from "@/modules/chat-center/components/ChatWorkspaceForwardDialogs.vue";
 import ChatWorkspaceRecordModals from "@/modules/chat-center/components/ChatWorkspaceRecordModals.vue";
 import { useChatWorkspaceForwarding } from "@/modules/chat-center/composables/useChatWorkspaceForwarding";
@@ -2115,12 +2060,7 @@ const {
     groupInvitationModalOpen,
     groupInvitationApplying,
     saveAssetDialogOpen,
-    saveAssetLoading,
     saveAssetSaving,
-    saveAssetCreateFolderOpen,
-    saveAssetFolderName,
-    saveAssetFolderEntries,
-    saveAssetBreadcrumbs,
     assetPreviewTitle,
     activeGroupInvitation,
     getAssetMessagePayload,
@@ -2136,6 +2076,8 @@ const {
     getAssetUploadProgress,
     isAssetUploading,
     showVideoPlayOverlay,
+    isAudioPlaying,
+    getAudioDurationText,
     getGroupInvitationPayload,
     isChatRecordMessage,
     hasMessageBubbleAction,
@@ -2143,10 +2085,6 @@ const {
     openGroupInvitationModal,
     handleMessageBubbleClick,
     triggerAssetDownload,
-    toggleSaveAssetFolderInline,
-    openSaveAssetBreadcrumb,
-    enterSaveAssetFolder,
-    handleCreateSaveAssetFolder,
     openSaveAssetDialog,
     confirmSaveAssetToResource,
     handleApplyGroupInvitation,

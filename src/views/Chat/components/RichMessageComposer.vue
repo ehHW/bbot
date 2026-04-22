@@ -1,6 +1,8 @@
 <template>
     <div class="composer-surface" :class="{ disabled }" @click="focus">
-        <div v-if="!hasRenderableContent" class="composer-surface__placeholder">{{ placeholder }}</div>
+        <div v-if="!hasRenderableContent" class="composer-surface__placeholder">
+            {{ placeholder }}
+        </div>
         <div
             ref="editorRef"
             class="composer-surface__editor"
@@ -14,240 +16,268 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref } from "vue";
 import {
     createComposerAttachmentChipElement,
     readComposerAttachmentTokenFromElement,
-} from '@/modules/chat-center/utils/chatAssetPrepare'
-import type { ChatComposerAttachmentToken, ChatComposerSegment } from '@/types/chat'
+} from "@/modules/chat-center/utils/chatAssetPrepare";
+import type {
+    ChatComposerAttachmentToken,
+    ChatComposerSegment,
+} from "@/types/chat";
 
 const props = defineProps<{
-    disabled?: boolean
-    placeholder: string
-    sendHotkey: 'enter' | 'ctrl_enter'
-}>()
+    disabled?: boolean;
+    placeholder: string;
+    sendHotkey: "enter" | "ctrl_enter";
+}>();
 
 const emit = defineEmits<{
-    'typing-change': [hasContent: boolean]
-    'request-submit': []
-    'paste-files': [files: File[]]
-}>()
+    "typing-change": [hasContent: boolean];
+    "request-submit": [];
+    "paste-files": [files: File[]];
+}>();
 
 export type RichMessageComposerExpose = {
-    clear: () => void
-    focus: () => void
-    getSegments: () => ChatComposerSegment[]
-    hasContent: () => boolean
-    insertText: (text: string) => void
-    insertAttachment: (attachment: ChatComposerAttachmentToken) => void
-}
+    clear: () => void;
+    focus: () => void;
+    getSegments: () => ChatComposerSegment[];
+    hasContent: () => boolean;
+    insertText: (text: string) => void;
+    insertAttachment: (attachment: ChatComposerAttachmentToken) => void;
+};
 
-const editorRef = ref<HTMLDivElement | null>(null)
-const revision = ref(0)
+const editorRef = ref<HTMLDivElement | null>(null);
+const revision = ref(0);
 
 const hasRenderableContent = computed(() => {
-    revision.value
-    return getSegments().length > 0
-})
+    revision.value;
+    return getSegments().length > 0;
+});
 
 const touch = () => {
-    revision.value += 1
-    emit('typing-change', getSegments().length > 0)
-}
+    revision.value += 1;
+    emit("typing-change", getSegments().length > 0);
+};
 
 const focus = () => {
     if (props.disabled) {
-        return
+        return;
     }
-    editorRef.value?.focus()
-}
+    editorRef.value?.focus();
+};
 
 const createAttachmentChip = (attachment: ChatComposerAttachmentToken) => {
-    return createComposerAttachmentChipElement(attachment)
-}
+    return createComposerAttachmentChipElement(attachment);
+};
 
 const placeCaretAfterNode = (node: Node) => {
-    const selection = window.getSelection()
+    const selection = window.getSelection();
     if (!selection) {
-        return
+        return;
     }
-    const range = document.createRange()
-    range.setStartAfter(node)
-    range.collapse(true)
-    selection.removeAllRanges()
-    selection.addRange(range)
-}
+    const range = document.createRange();
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+};
 
 const insertNodeAtCaret = (node: Node) => {
-    const editor = editorRef.value
+    const editor = editorRef.value;
     if (!editor) {
-        return
+        return;
     }
-    const selection = window.getSelection()
+    const selection = window.getSelection();
     if (!selection || !selection.rangeCount) {
-        editor.appendChild(node)
-        placeCaretAfterNode(node)
-        touch()
-        return
+        editor.appendChild(node);
+        placeCaretAfterNode(node);
+        touch();
+        return;
     }
-    const range = selection.getRangeAt(0)
+    const range = selection.getRangeAt(0);
     if (!editor.contains(range.commonAncestorContainer)) {
-        editor.appendChild(node)
-        placeCaretAfterNode(node)
-        touch()
-        return
+        editor.appendChild(node);
+        placeCaretAfterNode(node);
+        touch();
+        return;
     }
-    range.deleteContents()
-    range.insertNode(node)
-    placeCaretAfterNode(node)
-    touch()
-}
+    range.deleteContents();
+    range.insertNode(node);
+    placeCaretAfterNode(node);
+    touch();
+};
 
 const insertTextAtCaret = (text: string) => {
     if (!text) {
-        return
+        return;
     }
-    insertNodeAtCaret(document.createTextNode(text))
-}
+    insertNodeAtCaret(document.createTextNode(text));
+};
 
 const insertAttachment = (attachment: ChatComposerAttachmentToken) => {
-    const chip = createAttachmentChip(attachment)
-    insertNodeAtCaret(chip)
-    insertNodeAtCaret(document.createTextNode(' '))
-}
+    const chip = createAttachmentChip(attachment);
+    insertNodeAtCaret(chip);
+    insertNodeAtCaret(document.createTextNode(" "));
+};
 
 const insertText = (text: string) => {
-    insertTextAtCaret(text)
-}
+    insertTextAtCaret(text);
+};
 
 const clear = () => {
     if (!editorRef.value) {
-        return
+        return;
     }
-    editorRef.value.innerHTML = ''
-    touch()
-}
+    editorRef.value.innerHTML = "";
+    touch();
+};
 
-const readAttachmentFromElement = (element: HTMLElement): ChatComposerAttachmentToken | null => {
-    return readComposerAttachmentTokenFromElement(element)
-}
+const readAttachmentFromElement = (
+    element: HTMLElement,
+): ChatComposerAttachmentToken | null => {
+    return readComposerAttachmentTokenFromElement(element);
+};
 
 const collectSegments = (node: Node, parts: ChatComposerSegment[]) => {
     if (node.nodeType === Node.TEXT_NODE) {
-        parts.push({ kind: 'text', text: node.textContent || '' })
-        return
+        parts.push({ kind: "text", text: node.textContent || "" });
+        return;
     }
     if (!(node instanceof HTMLElement)) {
-        return
+        return;
     }
-    const attachment = readAttachmentFromElement(node)
+    const attachment = readAttachmentFromElement(node);
     if (attachment) {
-        parts.push({ kind: 'attachment', attachment })
-        return
+        parts.push({ kind: "attachment", attachment });
+        return;
     }
-    if (node.tagName === 'BR') {
-        parts.push({ kind: 'text', text: '\n' })
-        return
+    if (node.tagName === "BR") {
+        parts.push({ kind: "text", text: "\n" });
+        return;
     }
     for (const child of Array.from(node.childNodes)) {
-        collectSegments(child, parts)
+        collectSegments(child, parts);
     }
-    if (['DIV', 'P'].includes(node.tagName)) {
-        parts.push({ kind: 'text', text: '\n' })
+    if (["DIV", "P"].includes(node.tagName)) {
+        parts.push({ kind: "text", text: "\n" });
     }
-}
+};
 
 const getSegments = (): ChatComposerSegment[] => {
-    const editor = editorRef.value
+    const editor = editorRef.value;
     if (!editor) {
-        return []
+        return [];
     }
-    const rawParts: ChatComposerSegment[] = []
+    const rawParts: ChatComposerSegment[] = [];
     for (const child of Array.from(editor.childNodes)) {
-        collectSegments(child, rawParts)
+        collectSegments(child, rawParts);
     }
-    const merged: ChatComposerSegment[] = []
-    let textBuffer = ''
+    const merged: ChatComposerSegment[] = [];
+    let textBuffer = "";
     const flushText = () => {
-        const normalized = textBuffer.replace(/\u00a0/g, ' ').trim()
+        const normalized = textBuffer.replace(/\u00a0/g, " ").trim();
         if (normalized) {
-            merged.push({ kind: 'text', text: normalized })
+            merged.push({ kind: "text", text: normalized });
         }
-        textBuffer = ''
-    }
+        textBuffer = "";
+    };
     for (const part of rawParts) {
-        if (part.kind === 'text') {
-            textBuffer += part.text
-            continue
+        if (part.kind === "text") {
+            textBuffer += part.text;
+            continue;
         }
-        flushText()
-        merged.push(part)
+        flushText();
+        merged.push(part);
     }
-    flushText()
-    return merged
-}
+    flushText();
+    return merged;
+};
 
-const extractAttachmentNodesFromHtml = (html: string): ChatComposerAttachmentToken[] => {
-    const container = document.createElement('div')
-    container.innerHTML = html
-    return Array.from(container.querySelectorAll<HTMLElement>('[data-solbot-attachment="1"]'))
+const extractAttachmentNodesFromHtml = (
+    html: string,
+): ChatComposerAttachmentToken[] => {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    return Array.from(
+        container.querySelectorAll<HTMLElement>('[data-solbot-attachment="1"]'),
+    )
         .map((element) => readAttachmentFromElement(element))
-        .filter((item): item is ChatComposerAttachmentToken => Boolean(item))
-}
+        .filter((item): item is ChatComposerAttachmentToken => Boolean(item));
+};
 
 const handlePaste = (event: ClipboardEvent) => {
     if (props.disabled) {
-        event.preventDefault()
-        return
+        event.preventDefault();
+        return;
     }
-    const clipboardItems = Array.from(event.clipboardData?.items || [])
-    const pastedFiles = clipboardItems
-        .filter((item) => item.kind === 'file')
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => Boolean(file))
-        .filter((file) => /^image\/|^video\//.test(String(file.type || '')))
+    const clipboardItems = Array.from(event.clipboardData?.items || []);
+    const pastedFiles = [
+        ...Array.from(event.clipboardData?.files || []),
+        ...clipboardItems
+            .filter((item) => item.kind === "file")
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => Boolean(file)),
+    ].filter((file, index, files) => {
+        return (
+            files.findIndex((candidate) => {
+                return (
+                    candidate.name === file.name &&
+                    candidate.size === file.size &&
+                    candidate.type === file.type &&
+                    candidate.lastModified === file.lastModified
+                );
+            }) === index
+        );
+    });
     if (pastedFiles.length) {
-        event.preventDefault()
-        emit('paste-files', pastedFiles)
-        return
+        event.preventDefault();
+        emit("paste-files", pastedFiles);
+        return;
     }
-    const html = event.clipboardData?.getData('text/html') || ''
-    const attachments = html ? extractAttachmentNodesFromHtml(html) : []
+    const html = event.clipboardData?.getData("text/html") || "";
+    const attachments = html ? extractAttachmentNodesFromHtml(html) : [];
     if (attachments.length) {
-        event.preventDefault()
+        event.preventDefault();
         for (const attachment of attachments) {
-            insertAttachment(attachment)
+            insertAttachment(attachment);
         }
-        return
+        return;
     }
-    const plainText = event.clipboardData?.getData('text/plain') || ''
+    const plainText = event.clipboardData?.getData("text/plain") || "";
     if (plainText) {
-        event.preventDefault()
-        insertTextAtCaret(plainText)
+        event.preventDefault();
+        insertTextAtCaret(plainText);
     }
-}
+};
 
 const handleInput = () => {
-    touch()
-}
+    touch();
+};
 
 const handleKeydown = (event: KeyboardEvent) => {
     if (props.disabled) {
-        event.preventDefault()
-        return
+        event.preventDefault();
+        return;
     }
-    if (props.sendHotkey === 'enter') {
-        if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-            event.preventDefault()
-            emit('request-submit')
+    if (props.sendHotkey === "enter") {
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey
+        ) {
+            event.preventDefault();
+            emit("request-submit");
         }
-        return
+        return;
     }
-    if (event.key === 'Enter' && event.ctrlKey) {
-        event.preventDefault()
-        emit('request-submit')
+    if (event.key === "Enter" && event.ctrlKey) {
+        event.preventDefault();
+        emit("request-submit");
     }
-}
+};
 
 defineExpose<RichMessageComposerExpose>({
     clear,
@@ -256,7 +286,7 @@ defineExpose<RichMessageComposerExpose>({
     hasContent: () => getSegments().length > 0,
     insertText,
     insertAttachment,
-})
+});
 </script>
 
 <style scoped>
@@ -303,6 +333,7 @@ defineExpose<RichMessageComposerExpose>({
     display: inline-flex;
     align-items: center;
     gap: 10px;
+    max-width: 220px;
     margin: 2px 4px 2px 0;
     padding: 8px 10px;
     border-radius: 12px;
@@ -333,14 +364,20 @@ defineExpose<RichMessageComposerExpose>({
 
 .composer-surface__editor :deep(.composer-attachment-chip__body) {
     display: inline-flex;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
     vertical-align: middle;
 }
 
 .composer-surface__editor :deep(.composer-attachment-chip__name) {
+    display: block;
     font-weight: 600;
     color: #2f3945;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .composer-surface__editor :deep(.composer-attachment-chip__size) {

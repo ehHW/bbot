@@ -6,7 +6,16 @@
         :style="siderStyle"
     >
         <div class="logo">
-            <img src="@/assets/img/miao.png" alt="" />
+            <a-avatar
+                :size="30"
+                :src="menuAvatar || undefined"
+                class="logo__avatar"
+            >
+                {{ menuAvatarText }}
+            </a-avatar>
+            <span v-if="!collapsed" class="logo__name">{{
+                menuDisplayName
+            }}</span>
         </div>
 
         <a-menu
@@ -226,6 +235,11 @@ const chatMenuUnreadCount = computed(
 
 const route = useRoute();
 const router = useRouter();
+const menuDisplayName = computed(
+    () => userStore.user?.display_name || userStore.user?.username || "用户",
+);
+const menuAvatar = computed(() => userStore.user?.avatar || "");
+const menuAvatarText = computed(() => menuDisplayName.value.slice(0, 1));
 
 type MenuItem = {
     key: string;
@@ -419,8 +433,13 @@ const menuBadgeCount = (key: string) => {
     padding-inline: 3px;
     font-size: 9px;
     line-height: 14px;
+    color: #fff;
     transform: translate(47%, 13%);
     transform-origin: top right;
+}
+
+:deep(.menu-title-with-badge .ant-badge-count) {
+    color: #fff;
 }
 
 :deep(.ant-layout-sider-collapsed .ant-menu-item .menu-icon-badge),
@@ -448,11 +467,19 @@ const menuBadgeCount = (key: string) => {
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 8px;
 
-    > img {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
+    .logo__avatar {
+        flex: 0 0 auto;
+    }
+
+    .logo__name {
+        color: var(--text-primary);
+        font-size: 12px;
+        max-width: 96px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 }
 

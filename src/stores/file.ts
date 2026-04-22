@@ -1,6 +1,6 @@
 import { computed, markRaw, ref, toRaw, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi, restoreRecycleBinEntryApi } from '@/api/upload'
+import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntriesApi, renameFileEntryApi, resetSystemResourceCenterApi, restoreRecycleBinEntryApi } from '@/api/upload'
 import type { FileEntryItem, FileManageScope } from '@/api/upload'
 import type { AssetPreviewModel } from '@/types/assets'
 import { normalizeAssetPreviewModel } from '@/utils/assetPreview'
@@ -310,6 +310,15 @@ export const useFileStore = defineStore('file', () => {
         return data
     }
 
+    const resetSystemResourceCenter = async () => {
+        if (currentScope.value !== 'system') {
+            throw new Error('仅系统资源支持归零')
+        }
+        const { data } = await resetSystemResourceCenterApi()
+        await loadEntries(null)
+        return data
+    }
+
     const addUploadFiles = async (files: File[], parentId?: number | null) => {
         const normalizedParentId = parentId ?? currentParentId.value
         const snapshotFiles = await Promise.all(files.map((file) => cloneUploadFileSnapshot(file)))
@@ -602,6 +611,7 @@ export const useFileStore = defineStore('file', () => {
         renameEntry,
         restoreRecycleEntry,
         clearRecycleBinEntries,
+        resetSystemResourceCenter,
         addUploadFiles,
         runTaskUpload,
         startPendingUploads,

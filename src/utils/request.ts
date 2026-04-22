@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 axios.defaults.withCredentials = true
 
 const instance = axios.create({
-    baseURL: '/api/',
+    baseURL: '/api1/',
     timeout: 5000,
     withCredentials: true,
 })

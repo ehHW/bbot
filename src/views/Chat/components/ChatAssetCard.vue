@@ -4,10 +4,37 @@
         :class="{
             'chat-asset-card--media': hasMediaPreview,
             'chat-asset-card--media-meta': hasMediaPreview && showMediaMeta,
+            'chat-asset-card--audio': isAudioCard,
         }"
     >
+        <div v-if="isAudioCard" class="chat-asset-card__audio-row">
+            <span class="chat-asset-card__audio-control">
+                <span
+                    v-if="uploading"
+                    class="chat-asset-card__progress-ring chat-asset-card__progress-ring--inline"
+                >
+                    {{ normalizedUploadProgress }}%
+                </span>
+                <span
+                    v-else
+                    class="chat-asset-card__play-indicator chat-asset-card__play-indicator--inline"
+                >
+                    <PauseCircleFilled v-if="playing" />
+                    <CaretRightFilled v-else />
+                </span>
+            </span>
+            <div class="chat-asset-card__meta chat-asset-card__meta--audio">
+                <span class="chat-asset-card__name">{{
+                    resolvedPreview.displayName
+                }}</span>
+                <span class="chat-asset-card__size">{{
+                    audioDurationText || fileSizeLabel
+                }}</span>
+            </div>
+        </div>
+
         <div
-            v-if="hasMediaPreview"
+            v-else-if="hasMediaPreview"
             class="chat-asset-card__media-shell"
             :style="mediaBoxStyle"
         >
@@ -43,7 +70,7 @@
         </div>
 
         <div
-            v-if="!hasMediaPreview || showMediaMeta"
+            v-if="(!hasMediaPreview || showMediaMeta) && !isAudioCard"
             class="chat-asset-card__body"
         >
             <span v-if="!hasMediaPreview" class="chat-asset-card__icon">
@@ -60,7 +87,11 @@
 </template>
 
 <script setup lang="ts">
-import { CaretRightFilled, FileOutlined } from "@ant-design/icons-vue";
+import {
+    CaretRightFilled,
+    FileOutlined,
+    PauseCircleFilled,
+} from "@ant-design/icons-vue";
 import { computed } from "vue";
 import type { AssetPreviewModel } from "@/types/assets";
 import {
@@ -78,12 +109,16 @@ const props = withDefaults(
         showPlayableOverlay?: boolean;
         uploading?: boolean;
         uploadProgress?: number;
+        playing?: boolean;
+        audioDurationText?: string;
     }>(),
     {
         showMediaMeta: false,
         showPlayableOverlay: false,
         uploading: false,
         uploadProgress: 0,
+        playing: false,
+        audioDurationText: "",
     },
 );
 
@@ -106,18 +141,28 @@ const resolvedPreview = computed<AssetPreviewModel>(
         },
 );
 
-const isImagePreview = computed(
-    () => canAssetPreviewImage(resolvedPreview.value),
+const isImagePreview = computed(() =>
+    canAssetPreviewImage(resolvedPreview.value),
 );
 
-const isVideoPreview = computed(() => canAssetPreviewVideo(resolvedPreview.value));
+const isVideoPreview = computed(() =>
+    canAssetPreviewVideo(resolvedPreview.value),
+);
 
 const hasMediaPreview = computed(
     () => isImagePreview.value || isVideoPreview.value,
 );
 
-const previewSourceUrl = computed(
-    () => getAssetPreviewPrimaryUrl(resolvedPreview.value),
+const isAudioCard = computed(() => {
+    const mediaType = String(
+        resolvedPreview.value.mediaType || "",
+    ).toLowerCase();
+    const mimeType = String(resolvedPreview.value.mimeType || "").toLowerCase();
+    return mediaType === "audio" || mimeType.startsWith("audio/");
+});
+
+const previewSourceUrl = computed(() =>
+    getAssetPreviewPrimaryUrl(resolvedPreview.value),
 );
 
 const mediaBoxStyle = computed(() => {
@@ -209,9 +254,10 @@ const fileSizeLabel = computed(() =>
     width: 50px;
     height: 50px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    color: #111827;
-    font-size: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.96);
+    background: rgba(15, 23, 42, 0.4);
+    color: #ffffff;
+    font-size: 14px;
     font-weight: 700;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
 }
@@ -221,11 +267,53 @@ const fileSizeLabel = computed(() =>
     transform: translateX(2px);
 }
 
+.chat-asset-card__play-indicator--inline {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+}
+
+.chat-asset-card__play-indicator--inline :deep(svg) {
+    font-size: 18px;
+    transform: translateX(1px);
+}
+
+.chat-asset-card__progress-ring--inline {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+}
+
+.chat-asset-card__audio-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 220px;
+    max-width: 220px;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: #eef1f4;
+    color: #2f3945;
+    box-shadow: inset 0 0 0 1px rgba(47, 57, 69, 0.08);
+    box-sizing: border-box;
+}
+
+.chat-asset-card__audio-control {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.chat-asset-card__meta--audio {
+    gap: 2px;
+}
+
 .chat-asset-card__body {
     display: flex;
     align-items: center;
     gap: 12px;
-    width: 100%;
+    width: 220px;
+    max-width: 220px;
     min-width: 0;
     padding: 12px 14px;
     border-radius: 14px;
@@ -258,12 +346,18 @@ const fileSizeLabel = computed(() =>
 
 .chat-asset-card__name {
     font-weight: 600;
-    line-height: 1.5;
-    word-break: break-word;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: normal;
 }
 
 .chat-asset-card__size {
     font-size: 12px;
     color: rgba(47, 57, 69, 0.62);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 </style>

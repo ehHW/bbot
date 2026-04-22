@@ -84,7 +84,16 @@ export const uploadFileWithCategory = async ({
         if (relativePath) {
             formData.append('relative_path', relativePath)
         }
-        const { data } = await uploadSmallFileApi(formData)
+
+        const { data } = await uploadSmallFileApi(formData, {
+            onUploadProgress: (progressEvent: any) => {
+                if (progressEvent.total) {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                    onChunkProgress?.(percentCompleted)
+                }
+            }
+        })
+
         onHashProgress?.(100)
         onChunkProgress?.(100)
         onMergeProgress?.(100)

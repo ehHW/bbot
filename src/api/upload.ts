@@ -146,6 +146,13 @@ export const clearRecycleBinApi = (ids?: number[]) => {
     )
 }
 
+export const resetSystemResourceCenterApi = () => {
+    return instance.post<{ detail: string; removed_db_files: number; removed_db_dirs: number; removed_disk_files: number }>(
+        'upload/system-resource/reset/',
+        {},
+    )
+}
+
 export const createFolderApi = (payload: { name: string; parent_id?: number | null }) => {
     return instance.post<FileEntryItem>('upload/folders/', payload)
 }
@@ -158,10 +165,11 @@ export const renameFileEntryApi = (payload: { id: number; name: string }) => {
     return instance.post<FileEntryItem>('upload/rename/', payload)
 }
 
-export const uploadSmallFileApi = (formData: FormData) => {
+export const uploadSmallFileApi = (formData: FormData, config?: any) => {
     return instance.post<{ mode: string; file: FileEntryItem }>('upload/small/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
+        ...config,
     })
 }
 

@@ -719,6 +719,7 @@ const {
 
 .conversation-item__badge :deep(.ant-badge-count) {
     box-shadow: none;
+    color: #fff;
 }
 
 .conversation-item__name,
