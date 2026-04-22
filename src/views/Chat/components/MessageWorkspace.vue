@@ -1,14 +1,45 @@
 <template>
     <main class="chat-main" :style="chatMainStyle">
         <template v-if="chatConversationState.activeConversation">
-            <header class="chat-main__header">
-                <div class="chat-main__header-main">
-                    <div class="chat-main__title-row">
+            <header
+                class="chat-main__header"
+                :class="{
+                    'chat-main__header--mobile': showMobileMessageHeader,
+                }"
+            >
+                <button
+                    v-if="showMobileMessageHeader"
+                    type="button"
+                    class="chat-main__mobile-back"
+                    @click="handleMobileMessageBack"
+                >
+                    <LeftOutlined />
+                </button>
+                <div
+                    class="chat-main__header-main"
+                    :class="{
+                        'chat-main__header-main--mobile':
+                            showMobileMessageHeader,
+                    }"
+                >
+                    <div
+                        class="chat-main__title-row"
+                        :class="{
+                            'chat-main__title-row--mobile':
+                                showMobileMessageHeader,
+                        }"
+                    >
                         <div class="chat-main__title">
-                            {{ chatConversationState.activeConversation.name }}
+                            {{
+                                showMobileMessageHeader
+                                    ? mobileMessageHeaderTitle
+                                    : chatConversationState.activeConversation
+                                          .name
+                            }}
                         </div>
                         <div
                             v-if="
+                                !showMobileMessageHeader &&
                                 chatConversationState.activeConversation
                                     .type === 'group'
                             "
@@ -31,7 +62,7 @@
                         {{ directSourceHintText }}
                     </div>
                 </div>
-                <a-space>
+                <a-space class="chat-main__header-actions">
                     <template v-if="showDirectActions">
                         <a-button type="primary" ghost @click="handleAddFriend"
                             >加好友</a-button
@@ -520,7 +551,7 @@
             ></div>
 
             <footer
-                class="chat-main__composer"
+                class="chat-main__composer chat-main__footer"
                 :class="{ 'chat-main__composer--disabled': composerDisabled }"
             >
                 <div class="chat-main__composer-toolbar">
@@ -1516,6 +1547,7 @@ import {
     ArrowUpOutlined,
     EditOutlined,
     EllipsisOutlined,
+    LeftOutlined,
     MenuOutlined,
     PaperClipOutlined,
     PlusOutlined,
@@ -1565,6 +1597,11 @@ import type {
 } from "@/types/chat";
 import { useConversationWorkspaceScene } from "@/modules/chat-center/composables/useConversationWorkspaceScene";
 import { useChatShell } from "@/views/Chat/useChatShell";
+import {
+    isMobileChatDevice,
+    isMessageRouteName,
+    resolveMessagesRouteName,
+} from "@/views/Chat/chatLayout";
 import { getErrorMessage } from "@/utils/error";
 import { formatTime } from "@/utils/timeFormatter";
 import { trimText } from "@/validators/common";
@@ -1594,6 +1631,22 @@ const chatConversation = chatStore.conversation;
 const chatMessage = chatStore.message;
 const chatFriendship = chatStore.friendship;
 const chatGroup = chatStore.group;
+const showMobileMessageHeader = computed(
+    () => isMobileChatDevice() && route.name === "ChatMessagesMobileDetail",
+);
+const mobileMessageHeaderTitle = computed(() => {
+    const activeConversation = chatConversationState.activeConversation;
+    if (!activeConversation) {
+        return "聊天室";
+    }
+    if (activeConversation.type === "group") {
+        return `${activeConversation.name}(${activeConversation.member_count || 0})`;
+    }
+    return activeConversation.name;
+});
+const handleMobileMessageBack = async () => {
+    await router.push({ name: resolveMessagesRouteName(false) });
+};
 const {
     availableInviteFriends,
     canAddFriend,
@@ -1692,7 +1745,7 @@ const {
     formatDateTime,
     confirmAction: (options) => confirmAction(options),
     onCloseDrawerAfterLeave: async () => {
-        await router.replace({ name: "ChatMessages" });
+        await router.replace({ name: resolveMessagesRouteName(false) });
     },
 });
 
@@ -1772,8 +1825,18 @@ const composerPlaceholder = computed(
         composerBlockedReason.value ||
         `输入文本消息，按 ${sendShortcutLabel.value} 发送`,
 );
+const composerRenderHeight = computed(() => {
+    const rawHeight = Number(settingsStore.chatLayout.composerHeight);
+    if (!Number.isFinite(rawHeight)) {
+        return COMPOSER_MIN_HEIGHT;
+    }
+    return Math.min(
+        COMPOSER_MAX_HEIGHT,
+        Math.max(COMPOSER_MIN_HEIGHT, Math.round(rawHeight)),
+    );
+});
 const chatMainStyle = computed(() => ({
-    gridTemplateRows: `auto minmax(220px, 1fr) 8px ${settingsStore.chatLayout.composerHeight}px`,
+    gridTemplateRows: `auto minmax(220px, 1fr) 8px ${composerRenderHeight.value}px`,
 }));
 const muteDurationOptions = [
     { minutes: 10, label: "禁言 10 分钟" },
@@ -2249,7 +2312,7 @@ const syncActiveConversation = async () => {
             const lastSequence =
                 chatMessageState.activeMessages.at(-1)?.sequence || 0;
             if (
-                route.name === "ChatMessages" &&
+                isMessageRouteName(route.name) &&
                 chatConversationState.activeConversation?.access_mode ===
                     "member" &&
                 chatConversationState.activeConversation?.unread_count &&
@@ -2267,7 +2330,7 @@ const syncActiveConversation = async () => {
 };
 
 const syncMessageRouteConversation = async () => {
-    if (route.name !== "ChatMessages") {
+    if (!isMessageRouteName(route.name)) {
         return;
     }
 

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { applyGroupInvitationApi, searchChatApi } from '@/api/chat'
 import { useChatCapabilityScene } from '@/modules/chat-center/composables/useChatCapabilityScene'
+import { isMessageRouteName, resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 import type { ChatConversationItem, ChatSearchConversationItem, ChatSearchResult, ChatSearchUserItem } from '@/types/chat'
 import { getErrorMessage } from '@/utils/error'
 import { useChatShell } from '@/views/Chat/useChatShell'
@@ -126,7 +127,7 @@ export function useConversationListScene() {
     const conversationDisplayName = (conversation: ChatConversationItem) => conversation.friend_remark || conversation.name
 
     const getVisibleUnreadCount = (conversation: ChatConversationItem) => {
-        if (route.name === 'ChatMessages' && chatConversationState.activeConversationId === conversation.id) {
+        if (isMessageRouteName(route.name) && chatConversationState.activeConversationId === conversation.id) {
             return 0
         }
         return conversation.unread_count
@@ -176,8 +177,9 @@ export function useConversationListScene() {
         searchFocused.value = false
         discoverModalOpen.value = false
         await chatConversation.selectConversation(conversationId, focusSequence ? { focusSequence } : undefined)
-        if (route.name !== 'ChatMessages') {
-            await router.push({ name: 'ChatMessages' })
+        const targetRouteName = resolveMessagesRouteName(true)
+        if (route.name !== targetRouteName) {
+            await router.push({ name: targetRouteName })
         }
         allResultModalOpen.value = false
         closeContextMenu()
@@ -215,7 +217,7 @@ export function useConversationListScene() {
             ])
             if (data.mode === 'joined' && data.conversation?.id) {
                 await chatConversation.selectConversation(data.conversation.id)
-                await router.push({ name: 'ChatMessages' })
+                await router.push({ name: resolveMessagesRouteName(true) })
                 allResultModalOpen.value = false
                 discoverModalOpen.value = false
             }
@@ -251,7 +253,7 @@ export function useConversationListScene() {
             } else {
                 await chatConversation.openDirectConversation(userId)
             }
-            await router.push({ name: 'ChatMessages' })
+            await router.push({ name: resolveMessagesRouteName(true) })
             allResultModalOpen.value = false
             discoverModalOpen.value = false
         } catch (error: unknown) {
@@ -323,7 +325,7 @@ export function useConversationListScene() {
             groupForm.name = ''
             groupForm.member_user_ids = []
             message.success('群聊创建成功')
-            await router.push({ name: 'ChatMessages' })
+            await router.push({ name: resolveMessagesRouteName(true) })
         } catch (error: unknown) {
             message.error(getErrorMessage(error, '创建群聊失败'))
         } finally {

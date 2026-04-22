@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useChatCapabilityScene } from '@/modules/chat-center/composables/useChatCapabilityScene'
 import { subscribeAppRefresh } from '@/utils/appRefresh'
 import { getErrorMessage } from '@/utils/error'
+import { resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 import { useChatShell } from '@/views/Chat/useChatShell'
 
 export function useAuditScene(options?: { autoLoad?: boolean }) {
@@ -28,7 +29,7 @@ export function useAuditScene(options?: { autoLoad?: boolean }) {
 
     const openConversation = async (conversationId: number, sequence?: number) => {
         await chatConversation.selectConversation(conversationId, sequence ? { focusSequence: sequence } : undefined)
-        await router.push({ name: 'ChatMessages' })
+        await router.push({ name: resolveMessagesRouteName(true) })
     }
 
     onMounted(() => {

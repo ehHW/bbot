@@ -21,8 +21,8 @@
             <button
                 type="button"
                 class="contact-shortcut"
-                :class="{ active: route.name === 'ChatContactsFriendNotices' }"
-                @click="router.push({ name: 'ChatContactsFriendNotices' })"
+                :class="{ active: isFriendNoticeRouteActive }"
+                @click="router.push({ name: friendNoticeRouteName })"
             >
                 <span>好友通知</span>
                 <a-badge
@@ -33,8 +33,8 @@
             <button
                 type="button"
                 class="contact-shortcut"
-                :class="{ active: route.name === 'ChatContactsNotices' }"
-                @click="router.push({ name: 'ChatContactsNotices' })"
+                :class="{ active: isGroupNoticeRouteActive }"
+                @click="router.push({ name: groupNoticeRouteName })"
             >
                 <span>群通知</span>
                 <a-badge :count="groupNoticeCount" :overflow-count="99" />
@@ -229,7 +229,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { useContactScene } from "@/modules/chat-center/composables/useContactScene";
+import { isMobileChatDevice } from "@/views/Chat/chatLayout";
 
 const {
     CHAT_MODAL_WIDTH_SM,
@@ -254,6 +256,25 @@ const {
     shouldShowAddFriendAction,
     tallModalBodyStyle,
 } = useContactScene();
+
+const friendNoticeRouteName = computed(() =>
+    isMobileChatDevice()
+        ? "ChatContactsFriendNoticesMobile"
+        : "ChatContactsFriendNotices",
+);
+const groupNoticeRouteName = computed(() =>
+    isMobileChatDevice() ? "ChatContactsNoticesMobile" : "ChatContactsNotices",
+);
+const isFriendNoticeRouteActive = computed(() =>
+    ["ChatContactsFriendNotices", "ChatContactsFriendNoticesMobile"].includes(
+        String(route.name || ""),
+    ),
+);
+const isGroupNoticeRouteActive = computed(() =>
+    ["ChatContactsNotices", "ChatContactsNoticesMobile"].includes(
+        String(route.name || ""),
+    ),
+);
 </script>
 
 <style scoped>

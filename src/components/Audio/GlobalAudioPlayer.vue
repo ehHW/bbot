@@ -397,4 +397,20 @@ onBeforeUnmount(() => {
         max-width: 360px;
     }
 }
+
+:global(html.chat-device--mobile) .global-audio-player {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-right: 0;
+}
+
+@media (max-width: 900px) {
+    .global-audio-player {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin-right: 0 !important;
+    }
+}
 </style>

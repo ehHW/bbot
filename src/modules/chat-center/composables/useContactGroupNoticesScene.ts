@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useChatCapabilityScene } from '@/modules/chat-center/composables/useChatCapabilityScene'
 import { useGroupChatStore } from '@/stores/chat/groupState'
 import { getErrorMessage } from '@/utils/error'
+import { resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 import { useChatShell } from '@/views/Chat/useChatShell'
 
 export function useContactGroupNoticesScene() {
@@ -44,7 +45,7 @@ export function useContactGroupNoticesScene() {
         if (target) {
             await chatConversation.selectConversation(conversationId)
         }
-        await router.push({ name: 'ChatMessages' })
+        await router.push({ name: resolveMessagesRouteName(true) })
     }
 
     onMounted(() => {

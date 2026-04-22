@@ -3,6 +3,7 @@ import { message } from 'ant-design-vue'
 import type { Router } from 'vue-router'
 import type { ChatConversationMemberItem } from '@/types/chat'
 import { getErrorMessage } from '@/utils/error'
+import { resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 
 type FriendCandidate = {
     friend_user: {
@@ -327,7 +328,7 @@ export function useMessageWorkspaceMemberScene(options: MemberSceneOptions) {
                 : null
             memberModalOpen.value = false
             options.groupDrawerOpen.value = false
-            await options.router.push({ name: 'ChatMessages' })
+            await options.router.push({ name: resolveMessagesRouteName(true) })
         } catch (error: unknown) {
             message.error(getErrorMessage(error, '发起私聊失败'))
         }

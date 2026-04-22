@@ -5,6 +5,7 @@ import { useChatCapabilityScene } from '@/modules/chat-center/composables/useCha
 import type { ChatSearchUserItem } from '@/types/chat'
 import { getErrorMessage } from '@/utils/error'
 import { useChatShell } from '@/views/Chat/useChatShell'
+import { resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 
 export function useContactScene() {
     const route = useRoute()
@@ -84,7 +85,7 @@ export function useContactScene() {
             }
             await chatFriendship.loadFriends()
             addFriendModalOpen.value = false
-            await router.push({ name: 'ChatMessages' })
+            await router.push({ name: resolveMessagesRouteName(true) })
         } catch (error: unknown) {
             message.error(getErrorMessage(error, '打开私聊失败'))
         }
@@ -94,7 +95,7 @@ export function useContactScene() {
         try {
             await chatConversation.selectConversation(conversationId)
             await chatConversation.loadContactGroupConversations()
-            await router.push({ name: 'ChatMessages' })
+            await router.push({ name: resolveMessagesRouteName(true) })
         } catch (error: unknown) {
             message.error(getErrorMessage(error, '打开群聊失败'))
         }

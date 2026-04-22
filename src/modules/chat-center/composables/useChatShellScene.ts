@@ -9,6 +9,7 @@ import { useUserStore } from '@/stores/user'
 import { subscribeAppRefresh } from '@/utils/appRefresh'
 import type { ChatMessageItem } from '@/types/chat'
 import { getErrorMessage } from '@/utils/error'
+import { resolveMessagesRouteName } from '@/views/Chat/chatLayout'
 
 let bootstrapped = false
 
@@ -67,7 +68,7 @@ export function useChatShellScene(options?: { bootstrap?: boolean }) {
         try {
             await chatLifecycle.initialize(settingsStore.chatListSortMode)
             if (route.name === 'ChatCenter') {
-                await router.replace({ name: 'ChatMessages' })
+                await router.replace({ name: resolveMessagesRouteName(false) })
             }
         } catch (error: unknown) {
             message.error(getErrorMessage(error, '初始化聊天失败'))
@@ -101,7 +102,7 @@ export function useChatShellScene(options?: { bootstrap?: boolean }) {
         }
 
         const routeName = String(route.name || '')
-        if (routeName.includes('Audit') || routeName === 'ChatSettingsInspect') {
+        if (routeName.includes('Audit') || routeName === 'ChatSettingsInspect' || routeName === 'ChatSettingsInspectMobile') {
             tasks.push(chatAudit.loadAuditData())
         }
 

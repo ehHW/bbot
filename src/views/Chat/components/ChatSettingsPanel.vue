@@ -4,8 +4,8 @@
             <button
                 type="button"
                 class="setting-item"
-                :class="{ active: route.name === 'ChatSettingsShortcuts' }"
-                @click="router.push({ name: 'ChatSettingsShortcuts' })"
+                :class="{ active: isShortcutRouteActive }"
+                @click="router.push({ name: shortcutsRouteName })"
             >
                 <div class="drawer-list-title">快捷键</div>
             </button>
@@ -13,8 +13,8 @@
                 v-if="canReviewAllMessages"
                 type="button"
                 class="setting-item"
-                :class="{ active: route.name === 'ChatSettingsInspect' }"
-                @click="router.push({ name: 'ChatSettingsInspect' })"
+                :class="{ active: isInspectRouteActive }"
+                @click="router.push({ name: inspectRouteName })"
             >
                 <div class="drawer-list-title">巡检模式</div>
             </button>
@@ -23,9 +23,30 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { useChatSettingsScene } from "@/modules/chat-center/composables/useChatSettingsScene";
+import { isMobileChatDevice } from "@/views/Chat/chatLayout";
 
 const { canReviewAllMessages, route, router } = useChatSettingsScene();
+
+const shortcutsRouteName = computed(() =>
+    isMobileChatDevice()
+        ? "ChatSettingsShortcutsMobile"
+        : "ChatSettingsShortcuts",
+);
+const inspectRouteName = computed(() =>
+    isMobileChatDevice() ? "ChatSettingsInspectMobile" : "ChatSettingsInspect",
+);
+const isShortcutRouteActive = computed(() =>
+    ["ChatSettingsShortcuts", "ChatSettingsShortcutsMobile"].includes(
+        String(route.name || ""),
+    ),
+);
+const isInspectRouteActive = computed(() =>
+    ["ChatSettingsInspect", "ChatSettingsInspectMobile"].includes(
+        String(route.name || ""),
+    ),
+);
 </script>
 
 <style scoped>
