@@ -18,13 +18,39 @@
             <template v-if="isSuperuser">
                 <a-form layout="vertical" :model="formState">
                     <a-divider orientation="left">基础设置</a-divider>
-                    <a-form-item label="系统标题">
-                        <a-input
-                            v-model:value="formState.systemTitle"
-                            placeholder="请输入系统标题"
-                            @blur="handleSystemTitleBlur"
-                            @press-enter="handleSystemTitleEnter"
-                        />
+                    <a-form-item
+                        label="系统标题"
+                        class="settings-form-item--horizontal"
+                    >
+                        <div class="system-title-editor">
+                            <template v-if="systemTitleEditing">
+                                <a-input
+                                    ref="systemTitleInputRef"
+                                    v-model:value="formState.systemTitle"
+                                    placeholder="请输入系统标题"
+                                    class="system-title-editor__input system-title-editor__input--editing"
+                                    @blur="handleSystemTitleBlur"
+                                    @press-enter="handleSystemTitleEnter"
+                                    @keydown.esc="handleSystemTitleEscape"
+                                />
+                            </template>
+                            <template v-else>
+                                <span
+                                    class="system-title-editor__value"
+                                    @dblclick="toggleSystemTitleEditing"
+                                    >{{
+                                        formState.systemTitle || "未设置"
+                                    }}</span
+                                >
+                            </template>
+                            <button
+                                type="button"
+                                class="system-title-editor__edit"
+                                @click="toggleSystemTitleEditing"
+                            >
+                                <EditOutlined />
+                            </button>
+                        </div>
                     </a-form-item>
 
                     <a-divider orientation="left">系统维护</a-divider>
@@ -97,10 +123,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+} from "vue";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { message } from "ant-design-vue";
+import { EditOutlined } from "@ant-design/icons-vue";
 import { useSettingsStore } from "@/stores/settings";
 import { useSystemStore } from "@/stores/system";
 import { useUserStore } from "@/stores/user";
@@ -115,6 +149,8 @@ const savingMaintenance = ref(false);
 const publishingAnnouncement = ref(false);
 const announcementModalOpen = ref(false);
 const skipNextSystemTitleBlur = ref(false);
+const systemTitleEditing = ref(false);
+const systemTitleInputRef = ref<{ focus: () => void } | null>(null);
 const saveStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
 let saveStatusTimer: ReturnType<typeof setTimeout> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -233,12 +269,24 @@ const saveMaintenanceSettings = async () => {
     }
 };
 
+const toggleSystemTitleEditing = async () => {
+    systemTitleEditing.value = true;
+    await nextTick();
+    systemTitleInputRef.value?.focus();
+};
+
+const handleSystemTitleEscape = () => {
+    syncFromStore();
+    systemTitleEditing.value = false;
+};
+
 const handleSystemTitleBlur = async () => {
     if (skipNextSystemTitleBlur.value) {
         skipNextSystemTitleBlur.value = false;
         return;
     }
     await saveSystemTitle();
+    systemTitleEditing.value = false;
 };
 
 const handleSystemTitleEnter = async (event: KeyboardEvent) => {
@@ -246,6 +294,7 @@ const handleSystemTitleEnter = async (event: KeyboardEvent) => {
     skipNextSystemTitleBlur.value = true;
     (event.target as HTMLInputElement | null)?.blur();
     await saveSystemTitle();
+    systemTitleEditing.value = false;
 };
 
 const handleMaintenanceEnabledChange = async (checked: boolean) => {
@@ -408,5 +457,83 @@ onBeforeUnmount(() => {
 
 .announcement-content-textarea :deep(textarea) {
     resize: none;
+}
+
+.settings-form-item--horizontal :deep(.ant-form-item-row) {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.settings-form-item--horizontal :deep(.ant-form-item-label) {
+    flex: 0 0 auto;
+    padding-right: 16px;
+    padding-bottom: 0;
+    line-height: 32px;
+    white-space: nowrap;
+}
+
+.settings-form-item--horizontal :deep(.ant-form-item-control) {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.system-title-editor {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+}
+
+.system-title-editor__value {
+    min-width: 0;
+    padding-left: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+.system-title-editor__input {
+    flex: 1;
+    min-width: 0;
+}
+
+.system-title-editor__input--editing {
+    animation: field-focus-in 0.18s ease;
+}
+
+.system-title-editor__edit {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(22, 119, 255, 0.08);
+    color: #1677ff;
+    cursor: pointer;
+}
+
+.system-title-editor__edit:hover {
+    background: rgba(22, 119, 255, 0.16);
+}
+
+@keyframes field-focus-in {
+    from {
+        opacity: 0;
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 </style>

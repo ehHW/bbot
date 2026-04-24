@@ -2564,9 +2564,12 @@ onBeforeUnmount(() => {
     box-shadow: var(--chat-panel-shadow);
 }
 
-.chat-main__header,
-.chat-main__composer {
+.chat-main__header {
     padding: 12px 16px;
+}
+
+.chat-main__composer {
+    padding: 8px 10px;
 }
 
 .chat-main__header,
@@ -3019,7 +3022,7 @@ onBeforeUnmount(() => {
     );
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     min-height: 0;
 }
 
@@ -3043,10 +3046,14 @@ onBeforeUnmount(() => {
 }
 
 .chat-main__composer-trigger {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border-radius: 12px;
+    border-radius: 8px;
+}
+
+.chat-main__composer-trigger :deep(.anticon) {
+    font-size: 16px;
 }
 
 .chat-main__composer-input {

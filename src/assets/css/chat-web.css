@@ -91,14 +91,59 @@ html[data-theme="dark"].chat-device--web .chat-page {
     gap: 16px;
 }
 
+.chat-device--web .chat-main .chat-main__header {
+    padding: 12px 16px;
+}
+
+.chat-device--web .chat-main .chat-main__title {
+    line-height: 24px;
+}
+
+.chat-device--web .chat-main .chat-main__header-actions .ant-btn {
+    height: 24px;
+    min-height: 24px;
+    border-radius: 8px;
+}
+
+.chat-device--web
+    .chat-main
+    .chat-main__header-actions
+    .ant-btn:not(.chat-menu-trigger) {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 8px;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.chat-device--web .chat-main .chat-main__header-actions .ant-btn .anticon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.chat-device--web .chat-main .chat-main__header-actions .chat-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+}
+
 .chat-device--web .chat-main .chat-main__composer-toolbar {
     margin-top: 0;
 }
 
 .chat-device--web .chat-main .chat-main__composer-trigger {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 8px;
 }
 
 .chat-device--web .chat-main .chat-main__composer-input {
