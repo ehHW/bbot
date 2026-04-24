@@ -5,6 +5,7 @@ import {
     getMessageFailureHint,
     getMessageFailureToast,
     getMessageFailureTooltip,
+    shouldShowMessageFailureMenuHint,
     getWebSocketDisconnectedFailure,
     getWebSocketUnavailableFailure,
 } from '@/stores/chat/messageFailure'
@@ -30,6 +31,12 @@ describe('getMessageFailureHint', () => {
         expect(getMessageFailureDetail('你们还不是好友，当前私聊暂不支持发送附件')).toBe('你们还不是好友，当前私聊暂不支持发送附件')
         expect(getMessageFailureDetail('该消息已撤回，无法回复')).toBe('')
         expect(getMessageFailureTooltip('消息参数非法')).toBe('请重试或刷新\n消息参数非法')
+    })
+
+    it('hides permission-like failure copy from the failed message menu hint area', () => {
+        expect(shouldShowMessageFailureMenuHint('你们已不是好友，当前私聊消息发送失败')).toBe(false)
+        expect(shouldShowMessageFailureMenuHint('你们还不是好友，当前私聊暂不支持发送附件')).toBe(false)
+        expect(shouldShowMessageFailureMenuHint('消息参数非法')).toBe(true)
     })
 
     it('maps unknown errors to the same toast hint contract', () => {

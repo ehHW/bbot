@@ -1,4 +1,5 @@
 import type { ChatPreferencePayload } from '@/types/chat'
+import type { SystemSettingsPayload } from '@/types/system'
 
 export interface PermissionItem {
     id: number
@@ -33,9 +34,7 @@ export interface UserItem {
 export interface PermissionContext {
     permission_codes: string[]
     visible_menu_keys: string[]
-    system?: {
-        system_title: string
-    }
+    system?: SystemSettingsPayload
     chat?: ChatPreferencePayload
 }
 

@@ -8,6 +8,7 @@ import { globalWebSocket } from '@/utils/websocket'
 
 export const SMALL_FILE_THRESHOLD = 100 * 1024 * 1024
 export const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
+export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 
 export interface UploadFileOptions {
     file: File
@@ -61,6 +62,10 @@ export const uploadFileWithCategory = async ({
     shouldPause,
     shouldCancel,
 }: UploadFileOptions): Promise<UploadFileResult> => {
+    if (file.size > MAX_UPLOAD_FILE_SIZE) {
+        throw new Error(`文件不能超过 ${MAX_UPLOAD_FILE_SIZE / 1024 / 1024 / 1024}GB`)
+    }
+
     const checkInterrupted = () => {
         if (shouldCancel?.()) {
             throw new Error('上传已取消')

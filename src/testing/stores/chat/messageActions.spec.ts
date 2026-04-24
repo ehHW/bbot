@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatConversationItem, ChatFriendshipItem } from '@/types/chat'
-import { loadMessagesAction, sendAssetMessageAction } from '@/stores/chat/messageActions'
+import { loadMessagesAction, retryMessageAction, sendAssetMessageAction, sendTextMessageAction } from '@/stores/chat/messageActions'
 import { globalWebSocket } from '@/utils/websocket'
 
 const apiMocks = vi.hoisted(() => ({
@@ -206,5 +206,74 @@ describe('sendAssetMessageAction', () => {
         )
         expect(scheduleFallback).toHaveBeenCalledOnce()
         expect(scheduleSync).toHaveBeenCalledOnce()
+    })
+})
+
+describe('sendTextMessageAction', () => {
+    beforeEach(() => {
+        vi.mocked(globalWebSocket.send).mockReset()
+            ; (globalWebSocket.connected as { value: boolean }).value = true
+    })
+
+    it('allows direct text send for a non-friend conversation when can_send_message is true', async () => {
+        vi.mocked(globalWebSocket.send).mockReturnValue(true)
+        const insertLocalMessage = vi.fn()
+
+        await sendTextMessageAction({
+            content: 'hello user06',
+            activeConversation: computed(() => ({
+                ...baseConversation,
+                can_send_message: true,
+            })),
+            friends: ref<ChatFriendshipItem[]>([]),
+            insertLocalMessage,
+            updateLocalMessageStatus: vi.fn(),
+            clearSendingState: vi.fn(),
+            setSending: vi.fn(),
+            scheduleFallback: vi.fn(),
+            scheduleSync: vi.fn(),
+        })
+
+        expect(insertLocalMessage).toHaveBeenCalledWith(
+            12,
+            'hello user06',
+            expect.any(String),
+            'sending',
+        )
+        expect(globalWebSocket.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'chat_send_message',
+                conversation_id: 12,
+                content: 'hello user06',
+            }),
+        )
+    })
+
+    it('keeps direct retry blocked only when can_send_message is false', async () => {
+        const updateLocalMessageStatus = vi.fn()
+        const messageItem = {
+            id: 1,
+            sequence: 0,
+            message_type: 'text' as const,
+            content: 'retry content',
+            payload: { client_message_id: 'retry_1' },
+            is_system: false,
+            sender: null,
+            created_at: '2026-01-01T00:00:00Z',
+            local_status: 'failed' as const,
+            local_error: '发送失败',
+        }
+
+        await expect(retryMessageAction({
+            messageItem,
+            activeConversation: computed(() => ({
+                ...baseConversation,
+                can_send_message: false,
+            })),
+            friends: ref<ChatFriendshipItem[]>([]),
+            updateLocalMessageStatus,
+        })).rejects.toThrow('你们已不是好友，当前私聊消息发送失败')
+
+        expect(globalWebSocket.send).not.toHaveBeenCalled()
     })
 })

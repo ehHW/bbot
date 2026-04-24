@@ -7,6 +7,7 @@ import {
     ref,
 } from "vue";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChatMessageItem } from "@/types/chat";
 
 const routeState = ref({ name: "ChatMessages" });
 const stealthAuditEnabled = ref(false);
@@ -22,7 +23,7 @@ const activeConversation = {
     direct_target: { id: 9, username: "peer", display_name: "Peer", avatar: "" },
     member_count: 2,
 };
-const activeMessage = {
+const activeMessage: ChatMessageItem = {
     id: 101,
     sequence: 5,
     message_type: "text",
@@ -112,6 +113,8 @@ const menuHandleRestoreRevokedMessage = vi.fn(async () => undefined);
 const menuHandleRowClick = vi.fn();
 const menuClearSelection = vi.fn();
 const menuCloseMessageMenu = vi.fn();
+const messageMenuOpenRef = ref(false);
+const messageMenuMessageRef = ref<null | typeof activeMessage>(null);
 
 const ImportedSimpleStub = defineComponent({
     setup(_, { slots }) {
@@ -428,8 +431,8 @@ vi.mock("@/modules/chat-center/composables/useMessageWorkspaceAssetScene", () =>
 
 vi.mock("@/modules/chat-center/composables/useMessageWorkspaceMessageMenuScene", () => ({
     useMessageWorkspaceMessageMenuScene: () => ({
-        messageMenuOpen: ref(false),
-        messageMenuMessage: ref(null),
+        messageMenuOpen: messageMenuOpenRef,
+        messageMenuMessage: messageMenuMessageRef,
         messageSelectionMode: ref(false),
         selectedMessageIds: ref<number[]>([]),
         quotedMessage: ref(null),
@@ -538,6 +541,10 @@ describe("MessageWorkspace scene boundaries", () => {
         stealthAuditEnabled.value = false;
         activeMessage.content = "hello";
         activeMessage.payload = {};
+        activeMessage.local_status = null;
+        activeMessage.local_error = null;
+        messageMenuOpenRef.value = false;
+        messageMenuMessageRef.value = null;
     });
 
     it("delegates message bubble context menu to the message-menu scene", async () => {
@@ -624,5 +631,18 @@ describe("MessageWorkspace scene boundaries", () => {
 
         expect(chatStore.message.loadMessages).toHaveBeenCalledTimes(1);
         expect(chatStore.group.loadMembers).not.toHaveBeenCalled();
+    });
+
+    it("does not show permission failure copy in the failed-message menu", async () => {
+        activeMessage.local_status = "failed";
+        activeMessage.local_error = "你们已不是好友，当前私聊消息发送失败";
+        messageMenuOpenRef.value = true;
+        messageMenuMessageRef.value = activeMessage;
+
+        const wrapper = await mountWorkspace();
+
+        expect(wrapper.text()).not.toContain("无权限发送");
+        expect(wrapper.text()).not.toContain("你们已不是好友，当前私聊消息发送失败");
+        expect(wrapper.text()).toContain("重新发送");
     });
 });

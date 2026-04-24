@@ -15,6 +15,7 @@
                 </a-input>
             </a-auto-complete>
         </div>
+        <HeaderSystemAnnouncement />
         <div class="right">
             <div class="tool-area">
                 <a-tooltip title="刷新系统与当前页面">
@@ -74,6 +75,7 @@ import { message } from "ant-design-vue";
 import { useRouter } from "vue-router";
 import type { RouteRecordRaw } from "vue-router";
 import GlobalAudioPlayer from "@/components/Audio/GlobalAudioPlayer.vue";
+import HeaderSystemAnnouncement from "@/Layout/Components/HeaderSystemAnnouncement.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useSettingsStore } from "@/stores/settings";
 import { useUserStore } from "@/stores/user";

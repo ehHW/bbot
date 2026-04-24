@@ -141,6 +141,7 @@ src/
 
 - docs/V2/v2-release-acceptance-checklist.md
 - docs/chat/chat-message-flow-manual-checklist.md
+- docs/V2/update-2026-04-24.md
 
 ## 备注
 

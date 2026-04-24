@@ -134,6 +134,23 @@ export const routes: RouteRecordRaw[] = [
                         },
                     },
                     {
+                        path: 'settings/notifications',
+                        name: 'ChatSettingsNotifications',
+                        components: {
+                            default: () => import('@/views/Chat/components/ChatNotificationSettingsWorkspace.vue'),
+                            list: () => import('@/views/Chat/components/ChatSettingsPanel.vue'),
+                        },
+                        meta: {
+                            title: '聊天通知',
+                            requiresAuth: true,
+                            disableProgress: true,
+                            menu: true,
+                            menuTitle: '设置',
+                            menuIcon: 'tool',
+                            menuOrder: 3,
+                        },
+                    },
+                    {
                         path: 'settings/shortcuts',
                         name: 'ChatSettingsShortcuts',
                         components: {
@@ -144,10 +161,6 @@ export const routes: RouteRecordRaw[] = [
                             title: '聊天室设置',
                             requiresAuth: true,
                             disableProgress: true,
-                            menu: true,
-                            menuTitle: '设置',
-                            menuIcon: 'tool',
-                            menuOrder: 3,
                         },
                     },
                     {
@@ -234,6 +247,19 @@ export const routes: RouteRecordRaw[] = [
                             requiresAuth: true,
                             disableProgress: true,
                             mobileTab: 'settings',
+                        },
+                    },
+                    {
+                        path: 'm/settings/notifications',
+                        name: 'ChatSettingsNotificationsMobile',
+                        component: () => import('@/views/Chat/components/ChatNotificationSettingsWorkspace.vue'),
+                        meta: {
+                            title: '聊天通知',
+                            requiresAuth: true,
+                            disableProgress: true,
+                            mobileTab: 'settings',
+                            mobileDetail: true,
+                            mobileBackRouteName: 'ChatSettingsMobile',
                         },
                     },
                     {

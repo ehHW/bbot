@@ -17,6 +17,9 @@ export function createAuthRealtimeRuntime(options: {
             subscribeToRealtimeEvent('user.permission.updated', () => {
                 void options.refreshProfile().catch(() => undefined)
             }),
+            subscribeToRealtimeEvent('system.settings.updated', () => {
+                void options.refreshProfile().catch(() => undefined)
+            }),
             subscribeToRealtimeEvent('system.force_logout', ({ raw }) => {
                 const forceLogoutMessage = getEnvelopeMessage(raw, '您的账号已被强制下线')
                 options.forceLogout()

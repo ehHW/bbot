@@ -5,6 +5,14 @@ type MessageFailureTarget = 'message' | 'asset'
 const SCHEMA_ERROR_PATTERNS = ['消息参数非法', '请求格式错误', '格式错误', '参数非法', '不能为空']
 const PERMISSION_ERROR_PATTERNS = ['没有权限', '无权限', '不是好友', '暂不支持发送', '禁止发送', '已被禁言', '不可发送']
 
+export function isPermissionLikeMessageFailure(error: string | null | undefined) {
+    const normalizedError = String(error || '').trim()
+    if (!normalizedError) {
+        return false
+    }
+    return PERMISSION_ERROR_PATTERNS.some((pattern) => normalizedError.includes(pattern))
+}
+
 export function getDirectConversationRemovedFailure(target: MessageFailureTarget) {
     if (target === 'asset') {
         return '你们已不是好友，当前私聊附件发送失败'
@@ -34,10 +42,14 @@ export function getMessageFailureHint(error: string | null | undefined) {
     if (SCHEMA_ERROR_PATTERNS.some((pattern) => normalizedError.includes(pattern))) {
         return '请重试或刷新'
     }
-    if (PERMISSION_ERROR_PATTERNS.some((pattern) => normalizedError.includes(pattern))) {
+    if (isPermissionLikeMessageFailure(normalizedError)) {
         return '无权限发送'
     }
     return normalizedError
+}
+
+export function shouldShowMessageFailureMenuHint(error: string | null | undefined) {
+    return !isPermissionLikeMessageFailure(error)
 }
 
 export function getMessageFailureDetail(error: string | null | undefined) {

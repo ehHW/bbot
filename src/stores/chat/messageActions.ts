@@ -131,7 +131,10 @@ export async function sendTextMessageAction(options: {
     }
     const clientMessageId = `chat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const directConversationDeletedFriend =
-        conversation.type === 'direct' && !isSelfDirectConversation(conversation, options.currentUserId) && !options.friends.value.some((item) => item.direct_conversation?.id === conversation.id)
+        conversation.type === 'direct'
+        && !isSelfDirectConversation(conversation, options.currentUserId)
+        && conversation.access_mode === 'member'
+        && !conversation.can_send_message
     if (directConversationDeletedFriend) {
         const errorMessage = getDirectConversationRemovedFailure('message')
         options.insertLocalMessage(conversation.id, text, clientMessageId, 'failed', errorMessage)
@@ -171,7 +174,10 @@ export async function retryMessageAction(options: {
     }
     options.updateLocalMessageStatus(conversation.id, clientMessageId, 'sending')
     const directConversationDeletedFriend =
-        conversation.type === 'direct' && !isSelfDirectConversation(conversation, options.currentUserId) && !options.friends.value.some((item) => item.direct_conversation?.id === conversation.id)
+        conversation.type === 'direct'
+        && !isSelfDirectConversation(conversation, options.currentUserId)
+        && conversation.access_mode === 'member'
+        && !conversation.can_send_message
     if (directConversationDeletedFriend) {
         const errorMessage = getDirectConversationRemovedFailure('message')
         options.updateLocalMessageStatus(conversation.id, clientMessageId, 'failed', errorMessage)

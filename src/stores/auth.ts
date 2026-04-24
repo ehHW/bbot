@@ -4,6 +4,7 @@ import { loginApi, permissionContextApi, profileApi, refreshTokenApi } from '@/a
 import { createAuthRealtimeRuntime } from '@/stores/authRealtimeRuntime'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
+import { useSystemStore } from '@/stores/system'
 import { useUserStore } from '@/stores/user'
 import { globalWebSocket } from '@/utils/websocket'
 
@@ -14,6 +15,7 @@ export const useAuthStore = defineStore(
         const refreshToken = ref<string>('')
         const userStore = useUserStore()
         const settingsStore = useSettingsStore()
+        const systemStore = useSystemStore()
         let wsUnsubscribe: (() => void) | null = null
         const authRealtimeRuntime = createAuthRealtimeRuntime({
             refreshProfile: async () => {
@@ -40,6 +42,7 @@ export const useAuthStore = defineStore(
             authRealtimeRuntime.dispose()
             globalWebSocket.disconnect()
             settingsStore.markSessionSettingsStale()
+            systemStore.clear()
             accessToken.value = ''
             refreshToken.value = ''
             userStore.clearUser()
@@ -86,6 +89,7 @@ export const useAuthStore = defineStore(
             const { data } = await permissionContextApi()
             userStore.setAccessContext(data)
             settingsStore.applySessionContext(data)
+            systemStore.applySystemSettings(data.system)
             return data
         }
 

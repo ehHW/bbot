@@ -4,7 +4,7 @@ import { clearRecycleBinApi, createFolderApi, deleteFileEntryApi, getFileEntries
 import type { FileEntryItem, FileManageScope } from '@/api/upload'
 import type { AssetPreviewModel } from '@/types/assets'
 import { normalizeAssetPreviewModel } from '@/utils/assetPreview'
-import { uploadFileWithCategory } from '@/utils/fileUploader'
+import { MAX_UPLOAD_FILE_SIZE, uploadFileWithCategory } from '@/utils/fileUploader'
 import { useAuthStore } from '@/stores/auth'
 
 const sortFileEntries = (items: FileEntryItem[]) => {
@@ -320,6 +320,15 @@ export const useFileStore = defineStore('file', () => {
     }
 
     const addUploadFiles = async (files: File[], parentId?: number | null) => {
+        const oversizedFiles = files.filter((file) => file.size > MAX_UPLOAD_FILE_SIZE)
+        if (oversizedFiles.length > 0) {
+            const sampleNames = oversizedFiles
+                .slice(0, 3)
+                .map((file) => file.name)
+                .join('、')
+            throw new Error(`文件不能超过1GB：${sampleNames}`)
+        }
+
         const normalizedParentId = parentId ?? currentParentId.value
         const snapshotFiles = await Promise.all(files.map((file) => cloneUploadFileSnapshot(file)))
         const tasks = snapshotFiles.map<UploadTaskItem>((file) => {

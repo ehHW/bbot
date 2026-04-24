@@ -12,7 +12,7 @@ import type {
     ChatMessageAssetPayload,
 } from "@/types/chat";
 import { getErrorMessage } from "@/utils/error";
-import { uploadFileWithCategory } from "@/utils/fileUploader";
+import { MAX_UPLOAD_FILE_SIZE, uploadFileWithCategory } from "@/utils/fileUploader";
 import type { RichMessageComposerExpose } from "@/views/Chat/components/RichMessageComposer.vue";
 
 type UseMessageWorkspaceComposerSceneOptions = {
@@ -67,6 +67,18 @@ export function useMessageWorkspaceComposerScene(
 
     const prepareLocalFilesForComposer = async (files: File[]) => {
         if (!files.length) {
+            return;
+        }
+
+        const oversizedFiles = files.filter(
+            (file) => file.size > MAX_UPLOAD_FILE_SIZE,
+        );
+        if (oversizedFiles.length) {
+            const sampleNames = oversizedFiles
+                .slice(0, 3)
+                .map((file) => file.name)
+                .join("、");
+            message.warning(`文件不能超过1GB：${sampleNames}`);
             return;
         }
 

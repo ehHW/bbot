@@ -1,11 +1,19 @@
 export const getErrorMessage = (error: unknown, fallback = '操作失败') => {
     const maybeError = error as {
-        response?: { data?: Record<string, any> | string }
+        response?: { data?: Record<string, any> | string; status?: number }
         message?: string
     }
 
     const responseData = maybeError?.response?.data
+    const statusCode = Number(maybeError?.response?.status || 0)
     if (typeof responseData === 'string') {
+        const looksLikeHtml = /<\s*html|<\s*!doctype\s+html/i.test(responseData)
+        if (looksLikeHtml) {
+            if (statusCode === 404) {
+                return '请求地址不存在，请刷新页面后重试'
+            }
+            return fallback
+        }
         return responseData
     }
 

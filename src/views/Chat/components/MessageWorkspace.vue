@@ -627,7 +627,12 @@
                 :style="messageMenuStyle"
             >
                 <div
-                    v-if="messageMenuMessage.local_status === 'failed'"
+                    v-if="
+                        messageMenuMessage.local_status === 'failed' &&
+                        shouldShowMessageFailureMenuHint(
+                            messageMenuMessage.local_error,
+                        )
+                    "
                     class="failed-menu__hint"
                 >
                     <div class="failed-menu__hint-title">
@@ -1585,6 +1590,7 @@ import {
     getMessageFailureDetail,
     getMessageFailureHint,
     getMessageFailureTooltip,
+    shouldShowMessageFailureMenuHint,
 } from "@/stores/chat/messageFailure";
 import { useUserStore } from "@/stores/user";
 import type {

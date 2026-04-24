@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { message } from 'ant-design-vue'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -32,6 +33,31 @@ instance.interceptors.response.use(
     async (error) => {
         const authStore = useAuthStore()
         const originalRequest = error.config
+
+        if (
+            error.response?.status === 404 &&
+            typeof error.response?.data === 'string' &&
+            /<\s*html|<\s*!doctype\s+html/i.test(error.response.data)
+        ) {
+            error.response.data = {
+                detail: '接口不存在，请检查路径或刷新页面后重试',
+                error_code: 'endpoint_not_found',
+            }
+        }
+
+        if (
+            error.response?.status === 503 &&
+            error.response?.data?.error_code === 'system_maintenance'
+        ) {
+            const detail = String(error.response?.data?.detail || '系统维护中，请稍后再试')
+            if (originalRequest?.url !== 'auth/login/') {
+                authStore.clearAuth()
+                if (router.currentRoute.value.path !== '/login') {
+                    router.push('/login')
+                }
+            }
+            message.warning(detail)
+        }
 
         if (
             error.response?.status === 403 &&

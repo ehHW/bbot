@@ -4,6 +4,14 @@
             <button
                 type="button"
                 class="setting-item"
+                :class="{ active: isNotificationRouteActive }"
+                @click="router.push({ name: notificationRouteName })"
+            >
+                <div class="drawer-list-title">通知</div>
+            </button>
+            <button
+                type="button"
+                class="setting-item"
                 :class="{ active: isShortcutRouteActive }"
                 @click="router.push({ name: shortcutsRouteName })"
             >
@@ -34,8 +42,18 @@ const shortcutsRouteName = computed(() =>
         ? "ChatSettingsShortcutsMobile"
         : "ChatSettingsShortcuts",
 );
+const notificationRouteName = computed(() =>
+    isMobileChatDevice()
+        ? "ChatSettingsNotificationsMobile"
+        : "ChatSettingsNotifications",
+);
 const inspectRouteName = computed(() =>
     isMobileChatDevice() ? "ChatSettingsInspectMobile" : "ChatSettingsInspect",
+);
+const isNotificationRouteActive = computed(() =>
+    ["ChatSettingsNotifications", "ChatSettingsNotificationsMobile"].includes(
+        String(route.name || ""),
+    ),
 );
 const isShortcutRouteActive = computed(() =>
     ["ChatSettingsShortcuts", "ChatSettingsShortcutsMobile"].includes(
