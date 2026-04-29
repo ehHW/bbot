@@ -42,3 +42,8 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Package files
+*.tar.gz
+*.tgz
+*.tar
