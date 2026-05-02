@@ -150,22 +150,18 @@ function getFileExtension(filename: string): string {
     return match && match[1] ? match[1].toLowerCase() : ''
 }
 
+/** 图标资源根路径，由后端 /api1/uploads/icons/ 提供 */
+const ICON_BASE = '/api1/uploads/icons'
+
 /**
  * 根据文件名获取对应的图标路径
  * @param filename - 文件名（包含扩展名）
  * @param isDirectory - 是否为目录
- * @returns 图标的相对路径
+ * @returns 图标的 URL
  */
 export function getFileIcon(filename: string, isDirectory: boolean = false): string {
     if (isDirectory) {
-        // 可选目录图标：
-        // '/icons/folder-base.svg'
-        // '/icons/folder-other.svg'
-        // '/icons/folder-src.svg'
-        // '/icons/folder-open.svg'
-        // '/icons/folder-git.svg'
-        // '/icons/folder-home.svg'
-        return '/icons/folder-base.svg'
+        return `${ICON_BASE}/folder-base.svg`
     }
 
     const ext = getFileExtension(filename)
@@ -197,12 +193,12 @@ export function getFileIcon(filename: string, isDirectory: boolean = false): str
 
     const lowerFilename = filename.toLowerCase()
     if (specialFiles[lowerFilename]) {
-        return `/icons/${specialFiles[lowerFilename]}.svg`
+        return `${ICON_BASE}/${specialFiles[lowerFilename]}.svg`
     }
 
     // 根据扩展名查找图标
     const iconName = EXTENSION_ICON_MAP[ext] || EXTENSION_ICON_MAP['default']
-    return `/icons/${iconName}.svg`
+    return `${ICON_BASE}/${iconName}.svg`
 }
 
 /**

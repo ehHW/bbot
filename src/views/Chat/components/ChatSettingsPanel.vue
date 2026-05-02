@@ -33,37 +33,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useChatSettingsScene } from "@/modules/chat-center/composables/useChatSettingsScene";
-import { isMobileChatDevice } from "@/views/Chat/chatLayout";
 
 const { canReviewAllMessages, route, router } = useChatSettingsScene();
 
-const shortcutsRouteName = computed(() =>
-    isMobileChatDevice()
-        ? "ChatSettingsShortcutsMobile"
-        : "ChatSettingsShortcuts",
-);
-const notificationRouteName = computed(() =>
-    isMobileChatDevice()
-        ? "ChatSettingsNotificationsMobile"
-        : "ChatSettingsNotifications",
-);
-const inspectRouteName = computed(() =>
-    isMobileChatDevice() ? "ChatSettingsInspectMobile" : "ChatSettingsInspect",
-);
+const shortcutsRouteName = computed(() => "ChatSettingsShortcuts");
+const notificationRouteName = computed(() => "ChatSettingsNotifications");
+const inspectRouteName = computed(() => "ChatSettingsInspect");
 const isNotificationRouteActive = computed(() =>
-    ["ChatSettingsNotifications", "ChatSettingsNotificationsMobile"].includes(
-        String(route.name || ""),
-    ),
+    route.name === "ChatSettingsNotifications",
 );
 const isShortcutRouteActive = computed(() =>
-    ["ChatSettingsShortcuts", "ChatSettingsShortcutsMobile"].includes(
-        String(route.name || ""),
-    ),
+    route.name === "ChatSettingsShortcuts",
 );
 const isInspectRouteActive = computed(() =>
-    ["ChatSettingsInspect", "ChatSettingsInspectMobile"].includes(
-        String(route.name || ""),
-    ),
+    route.name === "ChatSettingsInspect",
 );
 </script>
 

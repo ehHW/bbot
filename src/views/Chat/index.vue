@@ -1,36 +1,6 @@
 <template>
     <div class="chat-page">
-        <section v-if="isMobileLayout" class="chat-mobile">
-            <div
-                class="chat-mobile__content"
-                :class="{
-                    'chat-mobile__content--detail': isMobileDetail,
-                    'chat-mobile__content--with-tabs': showMobileTabs,
-                }"
-            >
-                <RouterView :key="mobileRouteKey" />
-            </div>
-
-            <nav
-                v-if="showMobileTabs"
-                class="chat-mobile-tabs"
-                aria-label="聊天室底部导航"
-            >
-                <button
-                    v-for="item in mobileTabItems"
-                    :key="item.key"
-                    type="button"
-                    class="chat-mobile-tabs__item"
-                    :class="{ active: activeMobileTab === item.key }"
-                    @click="switchMobileTab(item.key)"
-                >
-                    {{ item.label }}
-                </button>
-            </nav>
-        </section>
-
         <section
-            v-else
             ref="chatShellRef"
             class="chat-shell"
             :style="chatShellStyle"
@@ -55,16 +25,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { RouterView, useRoute, useRouter } from "vue-router";
+import { computed, onBeforeUnmount, ref } from "vue";
+import { RouterView, useRoute } from "vue-router";
 import { useSettingsStore } from "@/stores/settings";
 import { useChatShell } from "@/views/Chat/useChatShell";
-import {
-    CHAT_MOBILE_ROUTE,
-    type ChatMobileTab,
-    isMobileChatDevice,
-    isMobileChatRouteName,
-} from "@/views/Chat/chatLayout";
 
 useChatShell({ bootstrap: true });
 
@@ -76,7 +40,6 @@ const LIST_MAX_WIDTH = 480;
 const WORKSPACE_MIN_WIDTH = 520;
 
 const route = useRoute();
-const router = useRouter();
 const settingsStore = useSettingsStore();
 const chatShellRef = ref<HTMLElement | null>(null);
 const dragState = ref<{
@@ -97,45 +60,6 @@ const listRouteKey = computed(
 const workspaceRouteKey = computed(
     () => `workspace:${String(route.name || route.fullPath)}`,
 );
-const mobileRouteKey = computed(
-    () => `mobile:${String(route.name || route.fullPath)}`,
-);
-const isMobileLayout = computed(() => isMobileChatDevice());
-const activeMobileTab = computed<ChatMobileTab>(() => {
-    const tab = route.meta.mobileTab;
-    if (tab === "contacts" || tab === "settings") {
-        return tab;
-    }
-    return "messages";
-});
-const isMobileDetail = computed(() => route.meta.mobileDetail === true);
-const showMobileTabs = computed(() => !isMobileDetail.value);
-
-const mobileTabItems: Array<{ key: ChatMobileTab; label: string }> = [
-    { key: "messages", label: "消息" },
-    { key: "contacts", label: "联系人" },
-    { key: "settings", label: "设置" },
-];
-
-const mapMobileRouteToDesktop = (routeName: string) => {
-    switch (routeName) {
-        case CHAT_MOBILE_ROUTE.messagesList:
-        case CHAT_MOBILE_ROUTE.messagesDetail:
-            return "ChatMessages";
-        case CHAT_MOBILE_ROUTE.contactsList:
-        case CHAT_MOBILE_ROUTE.contactsFriendNotices:
-            return "ChatContactsFriendNotices";
-        case CHAT_MOBILE_ROUTE.contactsNotices:
-            return "ChatContactsNotices";
-        case CHAT_MOBILE_ROUTE.settingsList:
-        case CHAT_MOBILE_ROUTE.settingsShortcuts:
-            return "ChatSettingsShortcuts";
-        case CHAT_MOBILE_ROUTE.settingsInspect:
-            return "ChatSettingsInspect";
-        default:
-            return "ChatMessages";
-    }
-};
 
 const persistLayout = () => {
     void settingsStore.saveChatPreferences({
@@ -156,12 +80,7 @@ const saveLayout = (next: { menuWidth?: number; listWidth?: number }) => {
 };
 
 const handleDragMove = (event: MouseEvent) => {
-    if (
-        !dragState.value ||
-        !chatShellRef.value ||
-        window.innerWidth <= 960 ||
-        isMobileLayout.value
-    ) {
+    if (!dragState.value || !chatShellRef.value) {
         return;
     }
     const shellWidth = chatShellRef.value.clientWidth;
@@ -191,9 +110,6 @@ const stopDrag = () => {
 };
 
 const startDrag = (target: DragTarget, event: MouseEvent) => {
-    if (window.innerWidth <= 960 || isMobileLayout.value) {
-        return;
-    }
     event.preventDefault();
     dragState.value = {
         target,
@@ -207,46 +123,50 @@ const startDrag = (target: DragTarget, event: MouseEvent) => {
 onBeforeUnmount(() => {
     stopDrag();
 });
-
-const switchMobileTab = async (tab: ChatMobileTab) => {
-    const routeNameByTab: Record<ChatMobileTab, string> = {
-        messages: CHAT_MOBILE_ROUTE.messagesList,
-        contacts: CHAT_MOBILE_ROUTE.contactsList,
-        settings: CHAT_MOBILE_ROUTE.settingsList,
-    };
-    const targetName = routeNameByTab[tab];
-    if (route.name !== targetName) {
-        await router.push({ name: targetName });
-    }
-};
-
-watch(
-    () => [isMobileLayout.value, String(route.name || "")],
-    async ([mobile, routeName]) => {
-        const routeNameText = String(routeName || "");
-        if (!mobile) {
-            if (isMobileChatRouteName(routeNameText)) {
-                await router.replace({
-                    name: mapMobileRouteToDesktop(routeNameText),
-                });
-            }
-            return;
-        }
-        if (isMobileChatRouteName(routeNameText)) {
-            return;
-        }
-        if (routeNameText.startsWith("ChatContacts")) {
-            await router.replace({ name: CHAT_MOBILE_ROUTE.contactsList });
-            return;
-        }
-        if (routeNameText.startsWith("ChatSettings")) {
-            await router.replace({ name: CHAT_MOBILE_ROUTE.settingsList });
-            return;
-        }
-        await router.replace({ name: CHAT_MOBILE_ROUTE.messagesList });
-    },
-    { immediate: true },
-);
 </script>
 
-<style scoped></style>
+<style scoped>
+.chat-page {
+    height: 100%;
+    min-width: 0;
+    padding: 0;
+    background: var(--chat-page-bg);
+}
+.chat-shell {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+.chat-shell__panel {
+    flex: 0 0 auto;
+    min-width: 0;
+    display: flex;
+    height: 100%;
+}
+.chat-shell__panel > * {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.chat-shell__panel--list {
+    flex: 0 0 var(--chat-list-width);
+}
+.chat-shell__panel--workspace {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.chat-shell__gutter {
+    position: relative;
+    flex: 0 0 1px;
+    padding: 0;
+    border: 0;
+    background: color-mix(in srgb, var(--chat-panel-border) 88%, transparent);
+    cursor: col-resize;
+}
+.chat-shell__gutter::before {
+    content: none;
+}
+.chat-shell__gutter:hover {
+    background: color-mix(in srgb, var(--chat-accent) 72%, var(--chat-panel-border));
+}
+</style>

@@ -93,12 +93,7 @@ export default defineConfig({
                 configure(proxy) {
                     suppressBenignProxyErrors(proxy)
                 }
-            },
-            '/api1': {
-                target: apiProxyTarget,
-                changeOrigin: true
-            },
-            '/api1/uploads': {
+            },            '/api1': {
                 target: apiProxyTarget,
                 changeOrigin: true
             }

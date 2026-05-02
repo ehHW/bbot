@@ -802,7 +802,29 @@ const {
 
 @media (max-width: 960px) {
     .chat-panel {
-        min-height: 320px;
+    min-height: 320px;
     }
+}
+
+/* ── Mobile overrides ─────────────────────────────────────── */
+:global(.chat-device--mobile) .chat-panel {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 3% 3.4% 2.4%;
+    border-radius: 3.2%;
+}
+:global(.chat-device--mobile) .chat-panel .toolbar-row {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-bottom: 2.2%;
+    background: var(--chat-panel-bg);
+}
+:global(.chat-device--mobile) .chat-panel .chat-panel__list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 1%;
 }
 </style>

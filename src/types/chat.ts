@@ -114,6 +114,8 @@ export interface ChatMessageAssetPayload {
     upload_progress?: number
     upload_phase?: 'uploading' | 'sending'
     local_upload_id?: string
+    /** 后端标记：文件已被删除，前端应展示"文件已过期" */
+    asset_expired?: boolean
     extra_metadata?: {
         video_processing?: ChatVideoProcessingMetadata
         audio_processing?: ChatVideoProcessingMetadata

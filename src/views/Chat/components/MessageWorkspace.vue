@@ -1,48 +1,13 @@
-<template>
-    <main class="chat-main" :style="chatMainStyle">
+<template>    <main class="chat-main" :style="chatMainStyle">
         <template v-if="chatConversationState.activeConversation">
-            <header
-                class="chat-main__header"
-                :class="{
-                    'chat-main__header--mobile': showMobileMessageHeader,
-                }"
-            >
-                <button
-                    v-if="showMobileMessageHeader"
-                    type="button"
-                    class="chat-main__mobile-back"
-                    @click="handleMobileMessageBack"
-                >
-                    <LeftOutlined />
-                </button>
-                <div
-                    class="chat-main__header-main"
-                    :class="{
-                        'chat-main__header-main--mobile':
-                            showMobileMessageHeader,
-                    }"
-                >
-                    <div
-                        class="chat-main__title-row"
-                        :class="{
-                            'chat-main__title-row--mobile':
-                                showMobileMessageHeader,
-                        }"
-                    >
+            <header class="chat-main__header">
+                <div class="chat-main__header-main">
+                    <div class="chat-main__title-row">
                         <div class="chat-main__title">
-                            {{
-                                showMobileMessageHeader
-                                    ? mobileMessageHeaderTitle
-                                    : chatConversationState.activeConversation
-                                          .name
-                            }}
+                            {{ chatConversationState.activeConversation.name }}
                         </div>
                         <div
-                            v-if="
-                                !showMobileMessageHeader &&
-                                chatConversationState.activeConversation
-                                    .type === 'group'
-                            "
+                            v-if="chatConversationState.activeConversation.type === 'group'"
                             class="chat-main__meta-tag"
                         >
                             {{
@@ -464,13 +429,18 @@
                                             v-else-if="
                                                 isAssetMessage(messageItem)
                                             "
-                                        >
-                                            <div class="attachment-bubble">
+                                        >                                            <div class="attachment-bubble">
                                                 <ChatAssetCard
                                                     :preview="
                                                         getAssetPreview(
                                                             messageItem,
                                                         )
+                                                    "
+                                                    :expired="
+                                                        getAssetMessagePayload(
+                                                            messageItem,
+                                                        )?.asset_expired ??
+                                                        false
                                                     "
                                                     :show-playable-overlay="
                                                         showVideoPlayOverlay(
@@ -1604,7 +1574,6 @@ import type {
 import { useConversationWorkspaceScene } from "@/modules/chat-center/composables/useConversationWorkspaceScene";
 import { useChatShell } from "@/views/Chat/useChatShell";
 import {
-    isMobileChatDevice,
     isMessageRouteName,
     resolveMessagesRouteName,
 } from "@/views/Chat/chatLayout";
@@ -1637,22 +1606,6 @@ const chatConversation = chatStore.conversation;
 const chatMessage = chatStore.message;
 const chatFriendship = chatStore.friendship;
 const chatGroup = chatStore.group;
-const showMobileMessageHeader = computed(
-    () => isMobileChatDevice() && route.name === "ChatMessagesMobileDetail",
-);
-const mobileMessageHeaderTitle = computed(() => {
-    const activeConversation = chatConversationState.activeConversation;
-    if (!activeConversation) {
-        return "聊天室";
-    }
-    if (activeConversation.type === "group") {
-        return `${activeConversation.name}(${activeConversation.member_count || 0})`;
-    }
-    return activeConversation.name;
-});
-const handleMobileMessageBack = async () => {
-    await router.push({ name: resolveMessagesRouteName(false) });
-};
 const {
     availableInviteFriends,
     canAddFriend,
@@ -3891,5 +3844,70 @@ onBeforeUnmount(() => {
 :deep(.ant-modal-body) {
     border-radius: 14px;
     overflow: hidden;
+}
+
+/* ── Layout overrides ─────────────────────────────────────── */
+.chat-main .chat-main__messages {
+    padding: 14px 18px;
+    gap: 16px;
+}
+.chat-main .chat-main__header {
+    padding: 12px 16px;
+}
+.chat-main .chat-main__title {
+    line-height: 24px;
+}
+.chat-main .chat-main__header-actions :deep(.ant-btn) {
+    height: 24px;
+    min-height: 24px;
+    border-radius: 8px;
+}
+.chat-main .chat-main__header-actions :deep(.ant-btn:not(.chat-menu-trigger)) {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 8px;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+}
+.chat-main .chat-main__header-actions :deep(.ant-btn .anticon) {
+    font-size: 14px;
+    line-height: 1;
+}
+.chat-main .chat-main__header-actions .chat-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+}
+.chat-main .chat-main__composer-toolbar {
+    margin-top: 0;
+}
+.chat-main .chat-main__composer-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 8px;
+}
+.chat-main .chat-main__composer-input {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.chat-main .chat-main__composer-input :deep(textarea) {
+    min-height: 96px !important;
+    height: 100% !important;
+}
+.composer-surface {
+    min-height: 112px;
+    height: 100%;
+    padding: 8px 10px;
+    margin: 0;
+    border-radius: 12px;
 }
 </style>

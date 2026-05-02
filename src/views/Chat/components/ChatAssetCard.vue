@@ -2,12 +2,26 @@
     <div
         class="chat-asset-card"
         :class="{
-            'chat-asset-card--media': hasMediaPreview,
-            'chat-asset-card--media-meta': hasMediaPreview && showMediaMeta,
-            'chat-asset-card--audio': isAudioCard,
+            'chat-asset-card--media': !expired && hasMediaPreview,
+            'chat-asset-card--media-meta': !expired && hasMediaPreview && showMediaMeta,
+            'chat-asset-card--audio': !expired && isAudioCard,
+            'chat-asset-card--expired': expired,
         }"
     >
-        <div v-if="isAudioCard" class="chat-asset-card__audio-row">
+        <!-- 文件已过期气泡 -->
+        <div v-if="expired" class="chat-asset-card__body chat-asset-card__body--expired">
+            <span class="chat-asset-card__icon chat-asset-card__icon--expired">
+                <WarningFilled />
+            </span>
+            <div class="chat-asset-card__meta">
+                <span class="chat-asset-card__name">{{
+                    resolvedPreview.displayName || "附件"
+                }}</span>
+                <span class="chat-asset-card__size chat-asset-card__size--expired">文件已过期</span>
+            </div>
+        </div>
+
+        <div v-else-if="isAudioCard" class="chat-asset-card__audio-row">
             <span class="chat-asset-card__audio-control">
                 <span
                     v-if="uploading"
@@ -31,9 +45,7 @@
                     audioDurationText || fileSizeLabel
                 }}</span>
             </div>
-        </div>
-
-        <div
+        </div>        <div
             v-else-if="hasMediaPreview"
             class="chat-asset-card__media-shell"
             :style="mediaBoxStyle"
@@ -67,9 +79,7 @@
                     <CaretRightFilled />
                 </span>
             </div>
-        </div>
-
-        <div
+        </div>        <div
             v-if="(!hasMediaPreview || showMediaMeta) && !isAudioCard"
             class="chat-asset-card__body"
         >
@@ -91,6 +101,7 @@ import {
     CaretRightFilled,
     FileOutlined,
     PauseCircleFilled,
+    WarningFilled,
 } from "@ant-design/icons-vue";
 import { computed } from "vue";
 import type { AssetPreviewModel } from "@/types/assets";
@@ -111,6 +122,7 @@ const props = withDefaults(
         uploadProgress?: number;
         playing?: boolean;
         audioDurationText?: string;
+        expired?: boolean;
     }>(),
     {
         showMediaMeta: false,
@@ -119,6 +131,7 @@ const props = withDefaults(
         uploadProgress: 0,
         playing: false,
         audioDurationText: "",
+        expired: false,
     },
 );
 
@@ -359,5 +372,20 @@ const fileSizeLabel = computed(() =>
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.chat-asset-card__body--expired {
+    opacity: 0.72;
+    cursor: not-allowed;
+}
+
+.chat-asset-card__icon--expired {
+    background: rgba(234, 88, 12, 0.12);
+    color: #ea580c;
+}
+
+.chat-asset-card__size--expired {
+    color: #ea580c;
+    font-weight: 500;
 }
 </style>

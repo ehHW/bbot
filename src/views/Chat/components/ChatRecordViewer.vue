@@ -35,14 +35,14 @@
                                 entry.message_type === 'image' ||
                                 entry.message_type === 'file'
                             "
-                        >
-                            <button
+                        >                            <button
                                 type="button"
                                 class="chat-record-viewer__asset"
                                 @click="openAsset(entry)"
                             >
                                 <ChatAssetCard
                                     :preview="getEntryPreview(entry)"
+                                    :expired="entry.asset?.asset_expired ?? false"
                                     :show-media-meta="hasMediaPreview(entry)"
                                     :show-playable-overlay="
                                         showVideoPlayOverlay(entry)

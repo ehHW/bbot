@@ -231,7 +231,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useContactScene } from "@/modules/chat-center/composables/useContactScene";
-import { isMobileChatDevice } from "@/views/Chat/chatLayout";
 
 const {
     CHAT_MODAL_WIDTH_SM,
@@ -257,23 +256,13 @@ const {
     tallModalBodyStyle,
 } = useContactScene();
 
-const friendNoticeRouteName = computed(() =>
-    isMobileChatDevice()
-        ? "ChatContactsFriendNoticesMobile"
-        : "ChatContactsFriendNotices",
-);
-const groupNoticeRouteName = computed(() =>
-    isMobileChatDevice() ? "ChatContactsNoticesMobile" : "ChatContactsNotices",
-);
+const friendNoticeRouteName = computed(() => "ChatContactsFriendNotices");
+const groupNoticeRouteName = computed(() => "ChatContactsNotices");
 const isFriendNoticeRouteActive = computed(() =>
-    ["ChatContactsFriendNotices", "ChatContactsFriendNoticesMobile"].includes(
-        String(route.name || ""),
-    ),
+    route.name === "ChatContactsFriendNotices",
 );
 const isGroupNoticeRouteActive = computed(() =>
-    ["ChatContactsNotices", "ChatContactsNoticesMobile"].includes(
-        String(route.name || ""),
-    ),
+    route.name === "ChatContactsNotices",
 );
 </script>
 
@@ -461,8 +450,7 @@ const isGroupNoticeRouteActive = computed(() =>
 
 .contact-tabs :deep(.ant-tabs-content-holder),
 .contact-tabs :deep(.ant-tabs-content),
-.contact-tabs :deep(.ant-tabs-tabpane) {
-    min-height: 0;
+.contact-tabs :deep(.ant-tabs-tabpane) {    min-height: 0;
     height: 100%;
 }
 </style>
