@@ -80,7 +80,7 @@
                 </span>
             </div>
         </div>        <div
-            v-if="(!hasMediaPreview || showMediaMeta) && !isAudioCard"
+            v-if="!expired && (!hasMediaPreview || showMediaMeta) && !isAudioCard"
             class="chat-asset-card__body"
         >
             <span v-if="!hasMediaPreview" class="chat-asset-card__icon">

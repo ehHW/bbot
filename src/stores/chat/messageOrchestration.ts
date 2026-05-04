@@ -1,5 +1,5 @@
 import type { ComputedRef, Ref } from 'vue'
-import { deleteMessageApi, restoreRevokedDraftApi, revokeMessageApi } from '@/api/chat'
+import { deleteMessageApi, batchDeleteMessagesApi, restoreRevokedDraftApi, revokeMessageApi } from '@/api/chat'
 import { globalWebSocket } from '@/utils/websocket'
 import { loadMessagesAction, loadOlderMessagesAction, markConversationReadAction, retryMessageAction, sendAssetMessageAction, sendTextMessageAction } from '@/stores/chat/messageActions'
 import type { ChatConversationItem, ChatFriendshipItem, ChatMessageAssetPayload, ChatMessageCursor, ChatMessageItem } from '@/types/chat'
@@ -208,6 +208,20 @@ export function createMessageOrchestration(deps: {
         return data
     }
 
+    const batchDeleteMessages = async (messageIds: number[]) => {
+        const { data } = await batchDeleteMessagesApi(messageIds)
+        const conversationId = data.conversation?.id || deps.activeConversation.value?.id
+        if (conversationId) {
+            const deletedSet = new Set(data.deleted_ids)
+            const items = deps.messageMap[conversationId] || []
+            deps.messageMap[conversationId] = items.filter((item) => !deletedSet.has(item.id))
+        }
+        if (data.conversation) {
+            deps.upsertConversation(data.conversation)
+        }
+        return data
+    }
+
     const restoreRevokedDraft = async (messageId: number) => {
         const { data } = await restoreRevokedDraftApi(messageId)
         const activeConversation = deps.activeConversation.value
@@ -250,8 +264,8 @@ export function createMessageOrchestration(deps: {
         sendTextMessage,
         sendAttachmentMessage,
         retryMessage,
-        revokeMessage,
-        deleteMessage,
+        revokeMessage,        deleteMessage,
+        batchDeleteMessages,
         restoreRevokedDraft,
         sendTyping,
         sendAttachmentMessageByReference,

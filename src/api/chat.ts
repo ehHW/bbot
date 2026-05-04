@@ -57,6 +57,10 @@ export const deleteMessageApi = (messageId: number) => {
     return instance.post<{ detail: string; message_id: number; conversation: ChatConversationItem }>(`chat/messages/${messageId}/delete/`)
 }
 
+export const batchDeleteMessagesApi = (messageIds: number[]) => {
+    return instance.post<{ detail: string; deleted_ids: number[]; conversation: ChatConversationItem }>(`chat/messages/batch-delete/`, { message_ids: messageIds })
+}
+
 export const restoreRevokedDraftApi = (messageId: number) => {
     return instance.post<{
         detail: string

@@ -49,26 +49,24 @@
                 :class="{
                     'chat-main__messages--positioning': isPositioningMessages,
                 }"
-            >
-                <a-button
-                    v-if="canLoadOlderMessages"
-                    size="small"
-                    class="chat-main__load-more"
-                    :loading="chatMessageState.loadingMessages"
-                    @click="handleLoadOlderMessages"
-                    >加载更早消息</a-button
-                >
-                <div
+            >                <div
                     v-if="messageSelectionMode"
                     class="chat-main__selection-bar"
-                >
-                    <span>已选择 {{ selectedMessageIds.length }} 条消息</span>
+                >                    <span>已选择 {{ selectedMessageIds.length }} 条消息</span>
                     <a-space>
                         <a-button
                             size="small"
                             @click="handleForwardSelection"
                             v-if="canForwardMessage"
                             >转发</a-button
+                        >
+                        <a-button
+                            size="small"
+                            danger
+                            v-if="canDeleteAnyMessage"
+                            :disabled="!selectedMessageIds.length"
+                            @click="handleBatchDeleteSelection"
+                            >删除</a-button
                         >
                         <a-button size="small" @click="clearMessageSelection"
                             >取消多选</a-button
@@ -2137,11 +2135,11 @@ const {
     handleForwardMessage,
     handleForwardSelection,
     handleQuoteMessage,
-    enableMessageSelection,
-    handleMenuDownloadAssetMessage,
+    enableMessageSelection,    handleMenuDownloadAssetMessage,
     handleMenuSaveAssetToResource,
     handleRevokeMessage,
     handleDeleteMessage,
+    handleBatchDeleteSelection,
     handleRestoreRevokedMessage,
 } = useMessageWorkspaceMessageMenuScene({
     chatConversationState,

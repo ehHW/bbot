@@ -25,8 +25,8 @@ type UseMessageWorkspaceMessageMenuSceneOptions = {
     };
     chatMessage: {
         retryMessage: (...args: any[]) => Promise<unknown>;
-        revokeMessage: (...args: any[]) => Promise<unknown>;
-        deleteMessage: (...args: any[]) => Promise<{ detail?: string }>;
+        revokeMessage: (...args: any[]) => Promise<unknown>;        deleteMessage: (...args: any[]) => Promise<{ detail?: string }>;
+        batchDeleteMessages: (messageIds: number[]) => Promise<{ detail?: string; deleted_ids: number[] }>;
         restoreRevokedDraft: (...args: any[]) => Promise<{ draft: any; detail?: string }>;
     };
     composerRef: Ref<RichMessageComposerExpose | null>;
@@ -257,14 +257,41 @@ export function useMessageWorkspaceMessageMenuScene(
         }
         options.beginForwardSelection([messageMenuMessage.value.id]);
         closeMessageMenu();
-    };
-
-    const handleForwardSelection = () => {
+    };    const handleForwardSelection = () => {
         if (!selectedMessageIds.value.length) {
             message.warning("请先选择消息");
             return;
         }
         options.beginForwardSelection(selectedMessageIds.value);
+    };
+
+    const handleBatchDeleteSelection = () => {
+        if (!selectedMessageIds.value.length) {
+            message.warning("请先选择消息");
+            return;
+        }
+        const ids = [...selectedMessageIds.value];
+        Modal.confirm({
+            title: `确认删除选中的 ${ids.length} 条消息？`,
+            content: "删除后，这些消息只会从你的视角中隐藏。",
+            okText: "删除",
+            okButtonProps: { danger: true },
+            cancelText: "取消",
+            async onOk() {
+                try {
+                    const { detail } = await options.chatMessage.batchDeleteMessages(ids);
+                    if (options.quotedMessage.value && ids.includes(options.quotedMessage.value.id)) {
+                        options.quotedMessage.value = null;
+                    }
+                    selectedMessageIds.value = [];
+                    messageSelectionMode.value = false;
+                    message.success(detail || `已删除 ${ids.length} 条消息`);
+                } catch (error: unknown) {
+                    message.error(getErrorMessage(error, "批量删除消息失败"));
+                    throw error;
+                }
+            },
+        });
     };
 
     const handleQuoteMessage = () => {
@@ -425,8 +452,8 @@ export function useMessageWorkspaceMessageMenuScene(
         handleDocumentClick,
         handleRetryMessage,
         handleCopyMessage,
-        handleForwardMessage,
-        handleForwardSelection,
+        handleForwardMessage,        handleForwardSelection,
+        handleBatchDeleteSelection,
         handleQuoteMessage,
         enableMessageSelection,
         handleMenuDownloadAssetMessage,

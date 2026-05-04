@@ -17,7 +17,7 @@ type GroupNamespace = Pick<ChatAssemblyRuntime,
 >
 
 type MessageNamespace = Pick<ChatAssemblyRuntime,
-    'loadMessages' | 'loadOlderMessages' | 'markConversationRead' | 'sendTextMessage' | 'sendAttachmentMessage' | 'sendTyping' | 'retryMessage' | 'revokeMessage' | 'deleteMessage' | 'restoreRevokedDraft'
+    'loadMessages' | 'loadOlderMessages' | 'markConversationRead' | 'sendTextMessage' | 'sendAttachmentMessage' | 'sendTyping' | 'retryMessage' | 'revokeMessage' | 'deleteMessage' | 'batchDeleteMessages' | 'restoreRevokedDraft'
 >
 
 type LifecycleNamespace = Pick<ChatAssemblyRuntime, 'initialized' | 'loading' | 'initialize' | 'bootstrapSummaries'> & {
@@ -121,8 +121,8 @@ export function createChatFacade<TState extends ChatStateNamespaces>(options: {
         sendAttachmentMessage: options.assembly.sendAttachmentMessage,
         sendTyping: options.assembly.sendTyping,
         retryMessage: options.assembly.retryMessage,
-        revokeMessage: options.assembly.revokeMessage,
-        deleteMessage: options.assembly.deleteMessage,
+        revokeMessage: options.assembly.revokeMessage,        deleteMessage: options.assembly.deleteMessage,
+        batchDeleteMessages: options.assembly.batchDeleteMessages,
         restoreRevokedDraft: options.assembly.restoreRevokedDraft,
     }
 
